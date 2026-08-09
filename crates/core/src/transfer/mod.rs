@@ -3,9 +3,12 @@
 //! collection ticket; receive flow lives in T9; resume records in T10.
 
 pub mod engine;
+pub mod receive;
 pub mod send;
 
 #[cfg(test)]
 mod engine_tests;
+#[cfg(test)]
+mod receive_tests;
 #[cfg(test)]
 mod send_tests;
