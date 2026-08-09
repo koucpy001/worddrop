@@ -20,6 +20,8 @@ serde_json = { workspace = true }
 tracing = { workspace = true }
 dirs = { workspace = true }
 rand = "0.9"
+# T8: consume the AddProgressItem import stream (n0_future::StreamExt; version already in lockfile).
+n0-future = { workspace = true }
 # T3: HKDF key confirmation (versions already in lockfile via spake2's tree).
 hkdf = "0.12"
 sha2 = "0.10"
