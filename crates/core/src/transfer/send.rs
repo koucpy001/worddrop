@@ -214,10 +214,14 @@ impl TransferEngine {
     /// walk them, import every file with [`ImportMode::TryReference`], build
     /// and store the collection, and return a pinned ticket. No connection is
     /// made — purely local preparation.
+    ///
+    /// The progress callback is `Send` so callers can drive a send flow from
+    /// a spawned task (e.g. the CLI and the e2e tests run the sender
+    /// concurrently with the receiver side of a pairing).
     pub async fn prepare_send(
         &self,
         paths: &[PathBuf],
-        progress: &mut dyn FnMut(ProgressEvent),
+        progress: &mut (dyn FnMut(ProgressEvent) + Send),
     ) -> Result<PreparedTransfer, SendError> {
         let mut discovered = Vec::new();
         for input in paths {

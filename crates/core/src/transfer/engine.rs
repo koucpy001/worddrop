@@ -110,10 +110,49 @@ impl TransferEngine {
     ///
     /// `secret_key` pins the node id to the persisted identity (T4); `None`
     /// yields an ephemeral id per engine, like sendme's default.
-    pub(crate) async fn with_relay_mode(
+    pub async fn with_relay_mode(
         data_dir: &Path,
         relay_mode: RelayMode,
         secret_key: Option<&SecretKey>,
+    ) -> Result<Self, Error> {
+        Self::build(data_dir, relay_mode, secret_key, None, presets::N0).await
+    }
+
+    /// Create an engine for the local e2e (T11): `presets::Minimal` — no
+    /// n0.computer address lookups, so a test run never touches the real
+    /// network — with an optional extra protocol handler registered on the
+    /// router for `alpn`.
+    ///
+    /// The extra ALPN exists because iroh-blobs consumes *every* incoming
+    /// bidi stream on its own ALPN as a blob request, so pairing control
+    /// traffic (T11: `open_bi`/`accept_bi` + wire framing) needs its own
+    /// ALPN on the sender's router.
+    pub async fn new_local(
+        data_dir: &Path,
+        relay_mode: RelayMode,
+        extra_handler: Option<(Vec<u8>, Box<dyn iroh::protocol::DynProtocolHandler>)>,
+    ) -> Result<Self, Error> {
+        Self::build(data_dir, relay_mode, None, extra_handler, presets::Minimal).await
+    }
+
+    /// Like [`new_local`](Self::new_local) but uses `presets::N0` (full
+    /// n0.computer stack) for e2e tests where the relay transport needs the
+    /// full preset. Still uses `RelayMode::Custom` so no public relay is
+    /// contacted — only the configured relay URL.
+    pub async fn new_local_n0(
+        data_dir: &Path,
+        relay_mode: RelayMode,
+        extra_handler: Option<(Vec<u8>, Box<dyn iroh::protocol::DynProtocolHandler>)>,
+    ) -> Result<Self, Error> {
+        Self::build(data_dir, relay_mode, None, extra_handler, presets::N0).await
+    }
+
+    async fn build(
+        data_dir: &Path,
+        relay_mode: RelayMode,
+        secret_key: Option<&SecretKey>,
+        extra_handler: Option<(Vec<u8>, Box<dyn iroh::protocol::DynProtocolHandler>)>,
+        preset: impl presets::Preset,
     ) -> Result<Self, Error> {
         let store_dir = data_dir.join(BLOBS_DIR);
         for path in [data_dir, store_dir.as_path()] {
@@ -125,17 +164,23 @@ impl TransferEngine {
             dir: store_dir,
             source: Box::new(source),
         })?;
-        let mut builder = Endpoint::builder(presets::N0)
-            .alpns(vec![iroh_blobs::ALPN.to_vec()])
+        let mut alpns = vec![iroh_blobs::ALPN.to_vec()];
+        if let Some((ref alpn, _)) = extra_handler {
+            alpns.push(alpn.clone());
+        }
+        let mut builder = Endpoint::builder(preset)
+            .alpns(alpns)
             .relay_mode(relay_mode);
         if let Some(key) = secret_key {
             builder = builder.secret_key(key.clone());
         }
         let endpoint = builder.bind().await.map_err(|source| Error::Bind { source })?;
         let blobs = BlobsProtocol::new(&store, None);
-        let router = Router::builder(endpoint)
-            .accept(iroh_blobs::ALPN, blobs)
-            .spawn();
+        let mut router_builder = Router::builder(endpoint).accept(iroh_blobs::ALPN, blobs);
+        if let Some((alpn, handler)) = extra_handler {
+            router_builder = router_builder.accept(alpn, handler);
+        }
+        let router = router_builder.spawn();
         Ok(Self { router, store, data_dir: data_dir.to_path_buf() })
     }
 

@@ -2276,6 +2276,7 @@ dependencies = [
  "hkdf",
  "iroh",
  "iroh-blobs",
+ "my-croc-rendezvous",
  "n0-future",
  "rand 0.9.5",
  "serde",
