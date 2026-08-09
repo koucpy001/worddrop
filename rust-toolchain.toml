@@ -1,0 +1,4 @@
+# Pin the toolchain to the stable 1.97 line (installed: rustc 1.97.1 / cargo 1.97.1).
+[toolchain]
+channel = "1.97.1"
+profile = "minimal"

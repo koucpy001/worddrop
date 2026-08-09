@@ -1,0 +1,13 @@
+# my-croc-cli — Linux CLI
+# `my-croc send <paths...>` / `my-croc receive [--code CODE] [--output DIR]`,
+# word-code pairing + progress UI (indicatif). Command logic lands in T12-T15.
+
+[package]
+name = "my-croc-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]

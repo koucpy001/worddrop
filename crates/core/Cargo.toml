@@ -1,0 +1,21 @@
+# my-croc-core — shared core library
+# Pairing (SPAKE2 word-code), session state machine, iroh transfer engine,
+# persistent identity, resume records. Used by CLI, GUI (via FRB bridge) and Android.
+
+[package]
+name = "my-croc-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+iroh = { workspace = true }
+iroh-blobs = { workspace = true }
+spake2 = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+dirs = { workspace = true }

@@ -1,0 +1,6 @@
+/target
+/flutter
+/flutter/build
+.dart_tool
+.idea
+*.local
