@@ -1,6 +1,9 @@
+# my-croc workspace ignores
 /target
 /flutter
 /flutter/build
 .dart_tool
 .idea
 *.local
+# opencode internal state (run-continuation is session bookkeeping, not source)
+.omo/run-continuation/
