@@ -7,6 +7,7 @@ pub mod identity;
 pub mod pairing;
 pub mod protocol;
 pub mod session;
+pub mod transfer;
 
 pub fn crate_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
