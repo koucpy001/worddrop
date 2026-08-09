@@ -4,11 +4,14 @@
 
 pub mod engine;
 pub mod receive;
+pub mod record;
 pub mod send;
 
 #[cfg(test)]
 mod engine_tests;
 #[cfg(test)]
 mod receive_tests;
+#[cfg(test)]
+mod resume_tests;
 #[cfg(test)]
 mod send_tests;

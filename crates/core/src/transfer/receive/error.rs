@@ -5,7 +5,7 @@ use std::{fmt, path::PathBuf};
 
 use iroh_blobs::get::GetError;
 
-use super::CONNECT_TIMEOUT;
+use super::core::CONNECT_TIMEOUT;
 
 /// Errors from the receive flow.
 #[derive(Debug)]
@@ -38,6 +38,9 @@ pub enum ReceiveError {
     ExportStreamEnded { file: String },
     /// An existing target could not be removed for overwrite.
     RemoveExisting { path: PathBuf, source: std::io::Error },
+    /// A transfer record could not be persisted (the resume convenience
+    /// state; the transfer itself is unaffected).
+    RecordSave { path: PathBuf, source: std::io::Error },
 }
 
 impl fmt::Display for ReceiveError {
@@ -76,6 +79,9 @@ impl fmt::Display for ReceiveError {
             ReceiveError::RemoveExisting { path, source } => {
                 write!(f, "failed to remove existing target {}: {source}", path.display())
             }
+            ReceiveError::RecordSave { path, source } => {
+                write!(f, "failed to save transfer record {}: {source}", path.display())
+            }
         }
     }
 }
@@ -85,7 +91,8 @@ impl std::error::Error for ReceiveError {
         match self {
             ReceiveError::TargetDir { source, .. }
             | ReceiveError::TargetDirResolve { source, .. }
-            | ReceiveError::RemoveExisting { source, .. } => Some(source),
+            | ReceiveError::RemoveExisting { source, .. }
+            | ReceiveError::RecordSave { source, .. } => Some(source),
             ReceiveError::LocalState { source } => Some(source.as_ref()),
             ReceiveError::Connect { source } => Some(source),
             ReceiveError::Sizes { source } | ReceiveError::Download { source } => Some(source),

@@ -2,34 +2,26 @@
 //! download the collection into the persistent store, stream progress
 //! events, and export the collection into the target dir with a conflict
 //! policy (skip existing targets unless `overwrite` is set).
+//!
+//! T10 adds the resumable entry point [`TransferEngine::receive_resumable`]:
+//! the same flow, but a [`TransferRecord`] is persisted at
+//! `<data_dir>/transfers/<hash>.json` (atomic write) so a crash mid-transfer
+//! can be resumed — the FsStore bitfield skips already-stored chunks, the
+//! record provides the UI offset and remembers exported files, and it is
+//! deleted once the receive succeeds. The shared core lives in `core.rs`.
 
-use std::{
-    path::{Path, PathBuf},
-    time::Duration,
+use std::path::{Path, PathBuf};
+
+use iroh_blobs::ticket::BlobTicket;
+use tracing::{info, warn};
+
+use super::{
+    engine::TransferEngine,
+    record::{RecordStore, TransferRecord},
 };
 
-use iroh_blobs::{
-    api::{
-        blobs::{ExportMode, ExportOptions, ExportProgressItem},
-        remote::GetProgressItem,
-    },
-    format::collection::Collection,
-    get::request::get_hash_seq_and_sizes,
-    ticket::BlobTicket,
-};
-use n0_future::StreamExt;
-use tracing::warn;
-
-use super::engine::TransferEngine;
-
-/// Upper bound for the collection blob (the hash seq root) when fetching
-/// sizes from the peer: a larger root is rejected as a bad request (sendme
-/// uses the same 32 MiB cap).
-const MAX_HASH_SEQ_SIZE: u64 = 1024 * 1024 * 32;
-
-/// Budget for the QUIC dial: noq has no handshake timeout (dead UDP peers
-/// are retried forever), so the receive flow bounds the connect itself.
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+mod core;
+mod error;
 
 /// Progress events emitted while receiving.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,8 +64,6 @@ pub struct TransferResult {
 /// Errors from the receive flow.
 pub use error::ReceiveError;
 
-mod error;
-
 /// Map a collection name to a target path under `root`, validating every
 /// component: empty, `.`, `..` and backslash-containing parts are rejected so
 /// a malicious collection cannot escape the target dir.
@@ -104,138 +94,50 @@ impl TransferEngine {
         options: ReceiveOptions,
         progress: &mut dyn FnMut(ReceiveProgress),
     ) -> Result<TransferResult, ReceiveError> {
-        tokio::fs::create_dir_all(&options.target_dir)
-            .await
-            .map_err(|source| ReceiveError::TargetDir {
-                path: options.target_dir.clone(),
-                source,
-            })?;
-        // The export API rejects relative targets (store/fs.rs export_path_impl).
-        let root = std::path::absolute(&options.target_dir)
-            .map_err(|source| ReceiveError::TargetDirResolve {
-                path: options.target_dir.clone(),
-                source,
-            })?;
+        self.receive_impl(ticket, options, progress, None).await
+    }
 
-        let hash_and_format = ticket.hash_and_format();
-        let local = self
-            .store()
-            .remote()
-            .local(hash_and_format)
-            .await
-            .map_err(|source| ReceiveError::LocalState { source: Box::new(source) })?;
-
-        if !local.is_complete() {
-            progress(ReceiveProgress::Connecting);
-            let connection = match tokio::time::timeout(
-                CONNECT_TIMEOUT,
-                self.endpoint().connect(ticket.addr().clone(), iroh_blobs::ALPN),
-            )
-            .await
-            {
-                Ok(Ok(connection)) => connection,
-                Ok(Err(source)) => {
-                    progress(ReceiveProgress::Error);
-                    return Err(ReceiveError::Connect { source });
-                }
-                Err(_) => {
-                    progress(ReceiveProgress::Error);
-                    return Err(ReceiveError::ConnectTimeout);
-                }
-            };
-            let (_hash_seq, sizes) = get_hash_seq_and_sizes(
-                &connection,
-                &hash_and_format.hash,
-                MAX_HASH_SEQ_SIZE,
-                None,
-            )
-            .await
-            .map_err(|source| {
-                progress(ReceiveProgress::Error);
-                ReceiveError::Sizes { source }
-            })?;
-            // sizes[0] is the collection metadata blob: the iroh collection
-            // format stores the meta blob as the first hash seq child, so the
-            // payload total skips it (sendme's total_files = len - 1 quirk).
-            let total = sizes.iter().skip(1).copied().sum::<u64>();
-            let local_bytes = local.local_bytes();
-            let mut stream = self
-                .store()
-                .remote()
-                .execute_get(connection, local.missing())
-                .stream();
-            while let Some(item) = stream.next().await {
-                match item {
-                    GetProgressItem::Progress(offset) => {
-                        // The offset also counts the collection root blob.
-                        progress(ReceiveProgress::Downloading {
-                            received: (local_bytes + offset).min(total),
-                            total,
-                        });
-                    }
-                    GetProgressItem::Done(_) => break,
-                    GetProgressItem::Error(source) => {
-                        progress(ReceiveProgress::Error);
-                        return Err(ReceiveError::Download { source });
-                    }
-                }
+    /// Receive like [`receive`](Self::receive), with a persistent resume
+    /// record (T10): the record at `<data_dir>/transfers/<hash>.json` is
+    /// loaded or created before the download, updated with progress and
+    /// exported files as the transfer runs, and deleted on success.
+    ///
+    /// Resume semantics: a fresh engine on the same data dir re-runs the
+    /// download, but the FsStore bitfield skips already-stored chunks (only
+    /// missing bytes cross the wire — the T7 spike), progress continues from
+    /// the record's `bytes_received`, and files the record marks as exported
+    /// are not re-exported. A missing, corrupt, or mismatched record is
+    /// treated as a fresh receive: a full download is fine.
+    pub async fn receive_resumable(
+        &self,
+        ticket: &BlobTicket,
+        options: ReceiveOptions,
+        progress: &mut dyn FnMut(ReceiveProgress),
+    ) -> Result<TransferResult, ReceiveError> {
+        let hash = ticket.hash();
+        let records = RecordStore::new(self.data_dir());
+        let mut record = match records.load(&hash, &options.target_dir).await {
+            Some(record) => {
+                info!(
+                    hash = %record.collection_hash,
+                    bytes = record.bytes_received,
+                    "resuming transfer from record"
+                );
+                record
             }
+            None => TransferRecord::new(hash, &options.target_dir),
+        };
+        let path = records.path(&hash);
+        records
+            .save(&record)
+            .await
+            .map_err(|source| ReceiveError::RecordSave { path, source })?;
+        let result = self.receive_impl(ticket, options, progress, Some(&mut record)).await?;
+        // Record deleted after success; a failed delete only leaves a stale
+        // record that the next receive treats as done and removes.
+        if let Err(source) = records.delete(&hash).await {
+            warn!(hash = %hash, error = %source, "failed to delete transfer record after success");
         }
-
-        let collection = Collection::load(hash_and_format.hash, self.store())
-            .await
-            .map_err(|source| ReceiveError::LoadCollection { source: Box::new(source) })?;
-        let mut bytes = 0u64;
-        let mut files = 0usize;
-        let mut skipped = Vec::new();
-        for (name, hash) in collection.iter() {
-            let target = export_target(&root, name)?;
-            if target.exists() {
-                if !options.overwrite {
-                    warn!(name, target = %target.display(), "skipping existing target");
-                    skipped.push(name.clone());
-                    continue;
-                }
-                tokio::fs::remove_file(&target)
-                    .await
-                    .map_err(|source| ReceiveError::RemoveExisting {
-                        path: target.clone(),
-                        source,
-                    })?;
-            }
-            progress(ReceiveProgress::Exporting { file: name.clone() });
-            let mut stream = self
-                .store()
-                .export_with_opts(ExportOptions {
-                    hash: *hash,
-                    target: target.clone(),
-                    mode: ExportMode::Copy,
-                })
-                .stream()
-                .await;
-            let mut file_size = 0u64;
-            let mut done = false;
-            while let Some(item) = stream.next().await {
-                match item {
-                    ExportProgressItem::Size(size) => file_size = size,
-                    ExportProgressItem::CopyProgress(_) => {}
-                    ExportProgressItem::Done => done = true,
-                    ExportProgressItem::Error(source) => {
-                        progress(ReceiveProgress::Error);
-                        return Err(ReceiveError::Export {
-                            file: name.clone(),
-                            source,
-                        });
-                    }
-                }
-            }
-            if !done {
-                return Err(ReceiveError::ExportStreamEnded { file: name.clone() });
-            }
-            bytes += file_size;
-            files += 1;
-        }
-        progress(ReceiveProgress::Done { bytes, files });
-        Ok(TransferResult { bytes, files, skipped })
+        Ok(result)
     }
 }

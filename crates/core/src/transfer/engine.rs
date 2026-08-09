@@ -90,6 +90,9 @@ impl std::error::Error for Error {
 pub struct TransferEngine {
     router: Router,
     store: FsStore,
+    /// The data dir the engine was created with: home of the blob store and
+    /// of the transfer records (`<data_dir>/transfers/`, T10).
+    data_dir: PathBuf,
 }
 
 impl TransferEngine {
@@ -133,7 +136,7 @@ impl TransferEngine {
         let router = Router::builder(endpoint)
             .accept(iroh_blobs::ALPN, blobs)
             .spawn();
-        Ok(Self { router, store })
+        Ok(Self { router, store, data_dir: data_dir.to_path_buf() })
     }
 
     /// The bound endpoint (node id, direct addresses, connections).
@@ -144,6 +147,12 @@ impl TransferEngine {
     /// The blob store handle.
     pub fn store(&self) -> &Store {
         &self.store
+    }
+
+    /// The data dir the engine was created with (home of the transfer
+    /// records at `<data_dir>/transfers/`).
+    pub(crate) fn data_dir(&self) -> &Path {
+        &self.data_dir
     }
 
     /// Shut down the router (which shuts down the blobs protocol and closes
