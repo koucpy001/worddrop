@@ -1,0 +1,116 @@
+//! PGP word list (odd column), embedded as a const array.
+//!
+//! Source: magic-wormhole `_wordlist.py` (`byte_to_odd_word`, i.e. the second
+//! element of each byte pair) — verified byte-for-byte at T2 evidence time.
+//! magic-wormhole's `choose_words` starts every code with this column; we
+//! generate all three secret words from it. Words are stored lowercase,
+//! matching how magic-wormhole uses them (`.lower()` at generation, and the
+//! lowercase sets for completion matching).
+//!
+//! The full PGP word list has a second ("even") column of 256 words that we do
+//! not embed: codes are generated from this single 256-word list with 3
+//! distinct picks (per the T2 plan), so the even column is never produced or
+//! accepted.
+
+pub const WORDS: [&str; 256] = [
+    "adroitness", "adviser", "aftermath", "aggregate",
+    "alkali", "almighty", "amulet", "amusement",
+    "antenna", "applicant", "apollo", "armistice",
+    "article", "asteroid", "atlantic", "atmosphere",
+    "autopsy", "babylon", "backwater", "barbecue",
+    "belowground", "bifocals", "bodyguard", "bookseller",
+    "borderline", "bottomless", "bradbury", "bravado",
+    "brazilian", "breakaway", "burlington", "businessman",
+    "butterfat", "camelot", "candidate", "cannonball",
+    "capricorn", "caravan", "caretaker", "celebrate",
+    "cellulose", "certify", "chambermaid", "cherokee",
+    "chicago", "clergyman", "coherence", "combustion",
+    "commando", "company", "component", "concurrent",
+    "confidence", "conformist", "congregate", "consensus",
+    "consulting", "corporate", "corrosion", "councilman",
+    "crossover", "crucifix", "cumbersome", "customer",
+    "dakota", "decadence", "december", "decimal",
+    "designing", "detector", "detergent", "determine",
+    "dictator", "dinosaur", "direction", "disable",
+    "disbelief", "disruptive", "distortion", "document",
+    "embezzle", "enchanting", "enrollment", "enterprise",
+    "equation", "equipment", "escapade", "eskimo",
+    "everyday", "examine", "existence", "exodus",
+    "fascinate", "filament", "finicky", "forever",
+    "fortitude", "frequency", "gadgetry", "galveston",
+    "getaway", "glossary", "gossamer", "graduate",
+    "gravity", "guitarist", "hamburger", "hamilton",
+    "handiwork", "hazardous", "headwaters", "hemisphere",
+    "hesitate", "hideaway", "holiness", "hurricane",
+    "hydraulic", "impartial", "impetus", "inception",
+    "indigo", "inertia", "infancy", "inferno",
+    "informant", "insincere", "insurgent", "integrate",
+    "intention", "inventive", "istanbul", "jamaica",
+    "jupiter", "leprosy", "letterhead", "liberty",
+    "maritime", "matchmaker", "maverick", "medusa",
+    "megaton", "microscope", "microwave", "midsummer",
+    "millionaire", "miracle", "misnomer", "molasses",
+    "molecule", "montana", "monument", "mosquito",
+    "narrative", "nebula", "newsletter", "norwegian",
+    "october", "ohio", "onlooker", "opulent",
+    "orlando", "outfielder", "pacific", "pandemic",
+    "pandora", "paperweight", "paragon", "paragraph",
+    "paramount", "passenger", "pedigree", "pegasus",
+    "penetrate", "perceptive", "performance", "pharmacy",
+    "phonetic", "photograph", "pioneer", "pocketful",
+    "politeness", "positive", "potato", "processor",
+    "provincial", "proximate", "puberty", "publisher",
+    "pyramid", "quantity", "racketeer", "rebellion",
+    "recipe", "recover", "repellent", "replica",
+    "reproduce", "resistor", "responsive", "retraction",
+    "retrieval", "retrospect", "revenue", "revival",
+    "revolver", "sandalwood", "sardonic", "saturday",
+    "savagery", "scavenger", "sensation", "sociable",
+    "souvenir", "specialist", "speculate", "stethoscope",
+    "stupendous", "supportive", "surrender", "suspicious",
+    "sympathy", "tambourine", "telephone", "therapist",
+    "tobacco", "tolerance", "tomorrow", "torpedo",
+    "tradition", "travesty", "trombonist", "truncated",
+    "typewriter", "ultimate", "undaunted", "underfoot",
+    "unicorn", "unify", "universe", "unravel",
+    "upcoming", "vacancy", "vagabond", "vertigo",
+    "virginia", "visitor", "vocalist", "voyager",
+    "warranty", "waterloo", "whimsical", "wichita",
+    "wilmington", "wyoming", "yesteryear", "yucatan",
+];
+
+#[cfg(test)]
+mod tests {
+    use super::WORDS;
+
+    #[test]
+    fn wordlist_has_256_entries() {
+        assert_eq!(WORDS.len(), 256);
+    }
+
+    #[test]
+    fn wordlist_entries_are_lowercase_and_nonempty() {
+        for word in WORDS {
+            assert!(!word.is_empty(), "empty word in wordlist");
+            assert_eq!(word, word.to_lowercase(), "{word} is not lowercase");
+        }
+    }
+
+    #[test]
+    fn wordlist_entries_are_unique() {
+        let mut sorted = WORDS.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), WORDS.len());
+    }
+
+    #[test]
+    fn wordlist_matches_magic_wormhole_odd_column() {
+        // Spot-check against the reference transcription; the full
+        // byte-for-byte verification against _wordlist.py is recorded in the
+        // T2 evidence file.
+        assert_eq!(WORDS[0], "adroitness");
+        assert_eq!(WORDS[1], "adviser");
+        assert_eq!(WORDS[255], "yucatan");
+    }
+}
