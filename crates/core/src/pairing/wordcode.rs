@@ -245,7 +245,7 @@ mod tests {
         );
         // Plan QA scenario: 5 parts ending in a repeated word.
         assert!(
-            matches!(WordCode::validate("7-adroitness-adviser-aftermath-aftermath"), Err(_)),
+            WordCode::validate("7-adroitness-adviser-aftermath-aftermath").is_err(),
             "repeated word in 5-part code must be rejected"
         );
     }

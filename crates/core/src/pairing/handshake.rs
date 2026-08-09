@@ -78,7 +78,7 @@ fn hex_val(b: u8) -> Option<u8> {
 
 fn hex_decode(hex: &str) -> Result<Vec<u8>, SpakeError> {
     let bytes = hex.as_bytes();
-    if bytes.len() % 2 != 0 {
+    if !bytes.len().is_multiple_of(2) {
         return Err(SpakeError::InvalidHex(hex.to_string()));
     }
     let mut out = Vec::with_capacity(bytes.len() / 2);
