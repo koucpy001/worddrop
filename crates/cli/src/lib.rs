@@ -1,6 +1,13 @@
 //! my-croc-cli — Linux CLI binary crate.
 //!
-//! Placeholder crate; send/receive commands land in T13/T14.
+//! Command surface (clap, T12), TOML config file with env/default merge,
+//! unified error-to-exit-code mapping. Send/receive command logic lands in
+//! T13/T14.
+
+pub mod cli;
+pub mod commands;
+pub mod config;
+pub mod error;
 
 pub fn crate_version() -> &'static str {
     env!("CARGO_PKG_VERSION")

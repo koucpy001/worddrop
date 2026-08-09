@@ -1,6 +1,7 @@
 # my-croc-cli — Linux CLI
 # `my-croc send <paths...>` / `my-croc receive [--code CODE] [--output DIR]`,
-# word-code pairing + progress UI (indicatif). Command logic lands in T12-T15.
+# word-code pairing + progress UI (indicatif). Command logic lands in T13-T15;
+# T12 scaffolds the command surface, config file, and error/exit-code mapping.
 
 [package]
 name = "my-croc-cli"
@@ -10,4 +11,15 @@ license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 
+[[bin]]
+# Binary name is `my-croc` (package name would be `my-croc-cli`).
+name = "my-croc"
+path = "src/main.rs"
+
 [dependencies]
+my-croc-core = { path = "../core" }
+clap = { version = "4", features = ["derive"] }
+toml = "1"
+serde = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
