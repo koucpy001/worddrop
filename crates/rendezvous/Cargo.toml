@@ -11,3 +11,18 @@ authors.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+axum = "0.8"
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["trace"] }
+rand = "0.9"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+axum = "0.8"
+tower = { version = "0.5", features = ["util"] }
+serde_json = { workspace = true }
+tokio = { workspace = true }
