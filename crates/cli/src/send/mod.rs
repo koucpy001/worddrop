@@ -17,9 +17,9 @@ use tokio::sync::mpsc;
 use iroh::endpoint::Connection;
 
 use my_croc_core::pairing::wordcode::{WordCode, WordCodeError};
+use my_croc_core::session::Session;
 use my_croc_core::session::control::{ControlMessage, FileMeta, SessionError, send_message};
 use my_croc_core::session::state::{Transition, TransitionError};
-use my_croc_core::session::Session;
 use my_croc_core::transfer::engine::TransferEngine;
 use my_croc_core::transfer::send::ProgressEvent;
 
@@ -27,9 +27,7 @@ use crate::rendezvous_client::{RvClient, RvError};
 use crate::ui::SendUi;
 
 pub(super) mod transfer;
-use crate::wire::{
-    PAIR_TIMEOUT, PairError, recv_hello, recv_message_idle, spake_sender_side,
-};
+use crate::wire::{PAIR_TIMEOUT, PairError, recv_hello, recv_message_idle, spake_sender_side};
 
 /// How the send flow ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -91,9 +89,17 @@ impl fmt::Display for SendError {
                 "配对连接通道意外关闭，未收到接收方连接 / control acceptor closed before any receiver dialed in"
             ),
             Self::UnexpectedMessage(message) => {
-                write!(f, "意外的控制消息 / unexpected control message: {message:?}")
+                write!(
+                    f,
+                    "意外的控制消息 / unexpected control message: {message:?}"
+                )
             }
-            Self::ResultMismatch { expected_bytes, expected_files, got_bytes, got_files } => {
+            Self::ResultMismatch {
+                expected_bytes,
+                expected_files,
+                got_bytes,
+                got_files,
+            } => {
                 write!(
                     f,
                     "接收方结果与预期不符 / receiver result mismatch: expected {expected_bytes} bytes / {expected_files} \
@@ -181,8 +187,16 @@ where
     I: Future<Output = ()> + Unpin,
 {
     let mut interrupt = interrupt;
-    let outcome =
-        run_send_inner(&engine, control_rx, &rv, &paths, &ui, &mut interrupt, code_tx).await;
+    let outcome = run_send_inner(
+        &engine,
+        control_rx,
+        &rv,
+        &paths,
+        &ui,
+        &mut interrupt,
+        code_tx,
+    )
+    .await;
     let _ = engine.shutdown().await;
     outcome
 }
@@ -278,7 +292,13 @@ where
         ControlMessage::Accept => {
             session.transition(Transition::TransferStarted).await?;
             transfer::transfer_phase(
-                transfer::TransferContext { session: &session, engine, ui, total, file_count },
+                transfer::TransferContext {
+                    session: &session,
+                    engine,
+                    ui,
+                    total,
+                    file_count,
+                },
                 &mut send,
                 &mut recv,
                 interrupt,

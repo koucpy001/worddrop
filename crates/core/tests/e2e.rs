@@ -35,18 +35,20 @@ use iroh::protocol::{AcceptError, DynProtocolHandler, ProtocolHandler};
 use iroh::{RelayMode, RelayUrl};
 use iroh_blobs::ticket::BlobTicket;
 use my_croc_core::pairing::handshake::HandshakeMessage;
-use my_croc_core::pairing::spake::{SpakeError, SpakeSession, SessionKey};
+use my_croc_core::pairing::spake::{SessionKey, SpakeError, SpakeSession};
 use my_croc_core::pairing::wordcode::{WordCode, WordCodeError};
 use my_croc_core::pairing::wordlist::WORDS;
 use my_croc_core::protocol::wire::{WireError, WireMessage};
+use my_croc_core::session::Session;
 use my_croc_core::session::control::{
     ControlMessage, FileMeta, HANDSHAKE_TIMEOUT, IDLE_TIMEOUT, PROTOCOL_VERSION, SessionError,
     recv_message_timeout, send_message,
 };
 use my_croc_core::session::state::{SessionPhase, Transition, TransitionError};
-use my_croc_core::session::Session;
 use my_croc_core::transfer::engine::TransferEngine;
-use my_croc_core::transfer::receive::{ReceiveError, ReceiveOptions, ReceiveProgress, TransferResult};
+use my_croc_core::transfer::receive::{
+    ReceiveError, ReceiveOptions, ReceiveProgress, TransferResult,
+};
 use my_croc_core::transfer::send::{ProgressEvent, SendError};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -214,7 +216,8 @@ async fn ensure_relay() -> &'static RelayGuard {
 }
 
 fn relay_mode() -> RelayMode {
-    let url = RelayUrl::from_str(&format!("http://127.0.0.1:{RELAY_PORT}")).expect("valid relay URL");
+    let url =
+        RelayUrl::from_str(&format!("http://127.0.0.1:{RELAY_PORT}")).expect("valid relay URL");
     RelayMode::Custom(url.into())
 }
 
@@ -231,7 +234,10 @@ async fn receiver_engine(data_dir: &Path) -> TransferEngine {
     eng
 }
 
-async fn sender_engine(data_dir: &Path, control_tx: mpsc::UnboundedSender<Connection>) -> TransferEngine {
+async fn sender_engine(
+    data_dir: &Path,
+    control_tx: mpsc::UnboundedSender<Connection>,
+) -> TransferEngine {
     let handler: Box<dyn DynProtocolHandler> = ControlAcceptor::new(control_tx).into();
     let eng = TransferEngine::new_local_n0(
         data_dir,
@@ -322,7 +328,9 @@ struct RvClient {
 
 impl RvClient {
     fn new(base: &str) -> Self {
-        Self { base: base.to_string() }
+        Self {
+            base: base.to_string(),
+        }
     }
 
     /// Allocate a nameplate for `ticket`; returns the allocated nameplate.
@@ -330,14 +338,23 @@ impl RvClient {
         let body = serde_json::json!({ "ticket": ticket }).to_string();
         let (status, response) = self.request("POST", "/v1/pairs", Some(&body)).await?;
         if status != 201 {
-            return Err(RvError::Http { status, body: response });
+            return Err(RvError::Http {
+                status,
+                body: response,
+            });
         }
-        let value: serde_json::Value = serde_json::from_str(&response)
-            .map_err(|_| RvError::Parse { kind: "allocate", body: response.clone() })?;
+        let value: serde_json::Value =
+            serde_json::from_str(&response).map_err(|_| RvError::Parse {
+                kind: "allocate",
+                body: response.clone(),
+            })?;
         value["nameplate"]
             .as_u64()
             .map(|n| n as u32)
-            .ok_or(RvError::Parse { kind: "allocate", body: response })
+            .ok_or(RvError::Parse {
+                kind: "allocate",
+                body: response,
+            })
     }
 
     /// One-shot claim: returns the stored ticket, or the server's error.
@@ -348,17 +365,27 @@ impl RvClient {
     /// Claim with a raw path segment (exercises the server's 400 path for
     /// malformed nameplates, which never reach `u32` parsing).
     async fn claim_str(&self, nameplate: &str) -> Result<String, RvError> {
-        let (status, response) =
-            self.request("POST", &format!("/v1/pairs/{nameplate}/claim"), None).await?;
+        let (status, response) = self
+            .request("POST", &format!("/v1/pairs/{nameplate}/claim"), None)
+            .await?;
         if status != 200 {
-            return Err(RvError::Http { status, body: response });
+            return Err(RvError::Http {
+                status,
+                body: response,
+            });
         }
-        let value: serde_json::Value = serde_json::from_str(&response)
-            .map_err(|_| RvError::Parse { kind: "claim", body: response.clone() })?;
+        let value: serde_json::Value =
+            serde_json::from_str(&response).map_err(|_| RvError::Parse {
+                kind: "claim",
+                body: response.clone(),
+            })?;
         value["ticket"]
             .as_str()
             .map(str::to_string)
-            .ok_or(RvError::Parse { kind: "claim", body: response })
+            .ok_or(RvError::Parse {
+                kind: "claim",
+                body: response,
+            })
     }
 
     /// GET /health; Ok when the server answers "ok".
@@ -367,7 +394,10 @@ impl RvClient {
         if status == 200 && response.trim() == "ok" {
             Ok(())
         } else {
-            Err(RvError::Http { status, body: response })
+            Err(RvError::Http {
+                status,
+                body: response,
+            })
         }
     }
 
@@ -380,8 +410,10 @@ impl RvClient {
         let mut stream = TcpStream::connect(self.base.trim_start_matches("http://"))
             .await
             .map_err(RvError::Io)?;
-        let mut request =
-            format!("{method} {path} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n", self.base);
+        let mut request = format!(
+            "{method} {path} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n",
+            self.base
+        );
         if body.is_some() {
             request.push_str("Content-Type: application/json\r\n");
         }
@@ -392,9 +424,15 @@ impl RvClient {
         if let Some(body) = body {
             request.push_str(body);
         }
-        stream.write_all(request.as_bytes()).await.map_err(RvError::Io)?;
+        stream
+            .write_all(request.as_bytes())
+            .await
+            .map_err(RvError::Io)?;
         let mut response = Vec::new();
-        stream.read_to_end(&mut response).await.map_err(RvError::Io)?;
+        stream
+            .read_to_end(&mut response)
+            .await
+            .map_err(RvError::Io)?;
         let text = String::from_utf8_lossy(&response).into_owned();
         let (head, body) = text.split_once("\r\n\r\n").ok_or_else(|| RvError::Parse {
             kind: "response head",
@@ -590,7 +628,9 @@ async fn send_handshake<W>(writer: &mut W, message: &HandshakeMessage) -> Result
 where
     W: AsyncWrite + Unpin,
 {
-    let frame = WireMessage::new(message).encode().map_err(FlowError::Wire)?;
+    let frame = WireMessage::new(message)
+        .encode()
+        .map_err(FlowError::Wire)?;
     writer.write_all(&frame).await?;
     writer.flush().await?;
     Ok(())
@@ -678,8 +718,9 @@ where
     let (session, message) = SpakeSession::start(words);
     send_handshake(send, &HandshakeMessage::spake(&message)?).await?;
     let key = session.finish(&inbound)?;
-    let inbound_token =
-        recv_handshake_timeout(recv, PAIR_TIMEOUT, "sender confirm token").await?.into_confirm()?;
+    let inbound_token = recv_handshake_timeout(recv, PAIR_TIMEOUT, "sender confirm token")
+        .await?
+        .into_confirm()?;
     send_handshake(send, &HandshakeMessage::confirm(key.confirm_token())).await?;
     key.verify_confirm(&inbound_token)?;
     Ok(key)
@@ -703,8 +744,9 @@ where
         .into_pake()?;
     let key = session.finish(&inbound)?;
     send_handshake(send, &HandshakeMessage::confirm(key.confirm_token())).await?;
-    let inbound_token =
-        recv_handshake_timeout(recv, PAIR_TIMEOUT, "receiver confirm token").await?.into_confirm()?;
+    let inbound_token = recv_handshake_timeout(recv, PAIR_TIMEOUT, "receiver confirm token")
+        .await?
+        .into_confirm()?;
     key.verify_confirm(&inbound_token)?;
     Ok(key)
 }
@@ -757,7 +799,11 @@ async fn run_sender_flow(
     let nameplate = rv.allocate(&ticket).await?;
     let code = WordCode::generate(nameplate, &mut rand::rng())?;
     let words = code.password();
-    let _ = code_tx.send(PairInfo { code: code.to_string() }).await;
+    let _ = code_tx
+        .send(PairInfo {
+            code: code.to_string(),
+        })
+        .await;
 
     let conn = timeout(PAIR_TIMEOUT, control_rx.recv())
         .await
@@ -837,9 +883,9 @@ where
 {
     let message = recv_message_timeout(recv, HANDSHAKE_TIMEOUT, "sender hello").await?;
     match message {
-        ControlMessage::Hello { .. } => {
-            Ok(ControlMessage::Hello { version: PROTOCOL_VERSION })
-        }
+        ControlMessage::Hello { .. } => Ok(ControlMessage::Hello {
+            version: PROTOCOL_VERSION,
+        }),
         other => Err(FlowError::Unexpected(format!(
             "sender: expected hello, got {other:?}"
         ))),
@@ -851,7 +897,9 @@ async fn recv_message_idle<R>(recv: &mut R, what: &'static str) -> Result<Contro
 where
     R: AsyncRead + Unpin,
 {
-    recv_message_timeout(recv, IDLE_TIMEOUT, what).await.map_err(FlowError::Control)
+    recv_message_timeout(recv, IDLE_TIMEOUT, what)
+        .await
+        .map_err(FlowError::Control)
 }
 
 /// A word triple guaranteed to differ from `words` (for the wrong-words
@@ -924,13 +972,15 @@ async fn run_receiver_flow(
 
     // Claim the nameplate to get the sender's ticket.
     let ticket_str = rv.claim(nameplate).await?;
-    let ticket = BlobTicket::from_str(&ticket_str)
-        .map_err(|_| FlowError::Ticket(ticket_str.to_string()))?;
+    let ticket =
+        BlobTicket::from_str(&ticket_str).map_err(|_| FlowError::Ticket(ticket_str.to_string()))?;
 
     // Dial the sender on the control ALPN.
     let conn = timeout(
         PAIR_TIMEOUT,
-        engine.endpoint().connect(ticket.addr().clone(), CONTROL_ALPN),
+        engine
+            .endpoint()
+            .connect(ticket.addr().clone(), CONTROL_ALPN),
     )
     .await
     .map_err(|_| FlowError::Hung("receiver: dial sender on control ALPN"))??;
@@ -938,7 +988,13 @@ async fn run_receiver_flow(
 
     // Hello exchange: we send first, the sender echoes back. Both sides
     // version-gate via recv_message's `check_version` on arrival.
-    send_message(&mut send, &ControlMessage::Hello { version: PROTOCOL_VERSION }).await?;
+    send_message(
+        &mut send,
+        &ControlMessage::Hello {
+            version: PROTOCOL_VERSION,
+        },
+    )
+    .await?;
     let _hello = recv_message_timeout(&mut recv, HANDSHAKE_TIMEOUT, "receiver hello").await?;
 
     // SPAKE2 + key confirmation over the control stream.
@@ -1015,18 +1071,26 @@ async fn run_receiver_cancel_mid_transfer(
 ) -> Result<ReceiverDone, FlowError> {
     let (nameplate, words) = WordCode::split(code)?;
     let ticket_str = rv.claim(nameplate).await?;
-    let ticket = BlobTicket::from_str(&ticket_str)
-        .map_err(|_| FlowError::Ticket(ticket_str.to_string()))?;
+    let ticket =
+        BlobTicket::from_str(&ticket_str).map_err(|_| FlowError::Ticket(ticket_str.to_string()))?;
 
     let conn = timeout(
         PAIR_TIMEOUT,
-        engine.endpoint().connect(ticket.addr().clone(), CONTROL_ALPN),
+        engine
+            .endpoint()
+            .connect(ticket.addr().clone(), CONTROL_ALPN),
     )
     .await
     .map_err(|_| FlowError::Hung("receiver: dial sender on control ALPN"))??;
     let (mut send, mut recv) = conn.open_bi().await?;
 
-    send_message(&mut send, &ControlMessage::Hello { version: PROTOCOL_VERSION }).await?;
+    send_message(
+        &mut send,
+        &ControlMessage::Hello {
+            version: PROTOCOL_VERSION,
+        },
+    )
+    .await?;
     let _hello = recv_message_timeout(&mut recv, HANDSHAKE_TIMEOUT, "receiver hello").await?;
     let _key = spake_receiver_side(&mut send, &mut recv, words.as_bytes()).await?;
     let offer = recv_message_timeout(&mut recv, HANDSHAKE_TIMEOUT, "receiver offer").await?;
@@ -1094,8 +1158,9 @@ async fn abort_receive_mid_transfer(
             let _ = tx.try_send(());
         }
     };
-    let fut: std::pin::Pin<Box<dyn std::future::Future<Output = Result<TransferResult, ReceiveError>>>>
-        = if resumable {
+    let fut: std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<TransferResult, ReceiveError>>>,
+    > = if resumable {
         Box::pin(engine.receive_resumable(ticket, options, &mut progress))
     } else {
         Box::pin(engine.receive(ticket, options, &mut progress))
@@ -1533,7 +1598,10 @@ async fn e2e_resume_after_interrupt() {
     let aborted = abort_receive_mid_transfer(&receiver_eng1, &ticket, options.clone(), true)
         .await
         .expect("interrupted receive must end cleanly");
-    assert!(aborted, "receive must be interrupted mid-transfer, not before");
+    assert!(
+        aborted,
+        "receive must be interrupted mid-transfer, not before"
+    );
     let _ = receiver_eng1.shutdown().await;
 
     // A FRESH engine on the same data dir: the FsStore bitfield and the
@@ -1592,7 +1660,10 @@ async fn e2e_invalid_nameplate() {
 
     match result {
         Err(RvError::Http { status, .. }) => {
-            assert_eq!(status, 400, "server must return 400 for a word-bearing claim path");
+            assert_eq!(
+                status, 400,
+                "server must return 400 for a word-bearing claim path"
+            );
         }
         other => panic!("expected HTTP 400, got {other:?}"),
     }

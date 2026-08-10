@@ -18,7 +18,7 @@ use iroh_blobs::{
 use n0_future::StreamExt;
 use tracing::warn;
 
-use super::{error::ReceiveError, ReceiveOptions, ReceiveProgress, TransferResult};
+use super::{ReceiveOptions, ReceiveProgress, TransferResult, error::ReceiveError};
 use crate::transfer::{
     engine::TransferEngine,
     record::{RecordStore, TransferRecord, TransferStatus},
@@ -51,11 +51,12 @@ impl TransferEngine {
                 source,
             })?;
         // The export API rejects relative targets (store/fs.rs export_path_impl).
-        let root = std::path::absolute(&options.target_dir)
-            .map_err(|source| ReceiveError::TargetDirResolve {
+        let root = std::path::absolute(&options.target_dir).map_err(|source| {
+            ReceiveError::TargetDirResolve {
                 path: options.target_dir.clone(),
                 source,
-            })?;
+            }
+        })?;
         let records = RecordStore::new(self.data_dir());
 
         let hash_and_format = ticket.hash_and_format();
@@ -64,13 +65,16 @@ impl TransferEngine {
             .remote()
             .local(hash_and_format)
             .await
-            .map_err(|source| ReceiveError::LocalState { source: Box::new(source) })?;
+            .map_err(|source| ReceiveError::LocalState {
+                source: Box::new(source),
+            })?;
 
         if !local.is_complete() {
             progress(ReceiveProgress::Connecting);
             let connection = match tokio::time::timeout(
                 CONNECT_TIMEOUT,
-                self.endpoint().connect(ticket.addr().clone(), iroh_blobs::ALPN),
+                self.endpoint()
+                    .connect(ticket.addr().clone(), iroh_blobs::ALPN),
             )
             .await
             {
@@ -84,17 +88,13 @@ impl TransferEngine {
                     return Err(ReceiveError::ConnectTimeout);
                 }
             };
-            let (_hash_seq, sizes) = get_hash_seq_and_sizes(
-                &connection,
-                &hash_and_format.hash,
-                MAX_HASH_SEQ_SIZE,
-                None,
-            )
-            .await
-            .map_err(|source| {
-                progress(ReceiveProgress::Error);
-                ReceiveError::Sizes { source }
-            })?;
+            let (_hash_seq, sizes) =
+                get_hash_seq_and_sizes(&connection, &hash_and_format.hash, MAX_HASH_SEQ_SIZE, None)
+                    .await
+                    .map_err(|source| {
+                        progress(ReceiveProgress::Error);
+                        ReceiveError::Sizes { source }
+                    })?;
             // sizes[0] is the collection metadata blob: the iroh collection
             // format stores the meta blob as the first hash seq child, so the
             // payload total skips it (sendme's total_files = len - 1 quirk).
@@ -135,7 +135,9 @@ impl TransferEngine {
 
         let collection = Collection::load(hash_and_format.hash, self.store())
             .await
-            .map_err(|source| ReceiveError::LoadCollection { source: Box::new(source) })?;
+            .map_err(|source| ReceiveError::LoadCollection {
+                source: Box::new(source),
+            })?;
         let mut bytes = 0u64;
         let mut files = 0usize;
         let mut skipped = Vec::new();
@@ -155,12 +157,12 @@ impl TransferEngine {
                     skipped.push(name.clone());
                     continue;
                 }
-                tokio::fs::remove_file(&target)
-                    .await
-                    .map_err(|source| ReceiveError::RemoveExisting {
+                tokio::fs::remove_file(&target).await.map_err(|source| {
+                    ReceiveError::RemoveExisting {
                         path: target.clone(),
                         source,
-                    })?;
+                    }
+                })?;
             }
             progress(ReceiveProgress::Exporting { file: name.clone() });
             let mut stream = self
@@ -213,6 +215,10 @@ impl TransferEngine {
                 .map_err(|source| ReceiveError::RecordSave { path, source })?;
         }
         progress(ReceiveProgress::Done { bytes, files });
-        Ok(TransferResult { bytes, files, skipped })
+        Ok(TransferResult {
+            bytes,
+            files,
+            skipped,
+        })
     }
 }

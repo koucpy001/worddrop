@@ -116,10 +116,7 @@ pub enum Race<T> {
 /// Race an await against cancellation (drift's watch-cancellation pattern).
 /// Cancellation wins ties (`biased`), so an already-signalled cancel is
 /// observed deterministically.
-pub async fn race<T>(
-    cancel: &mut CancelWatcher,
-    future: impl Future<Output = T>,
-) -> Race<T> {
+pub async fn race<T>(cancel: &mut CancelWatcher, future: impl Future<Output = T>) -> Race<T> {
     tokio::select! {
         biased;
         _ = cancel.wait_cancelled() => Race::Cancelled,
@@ -138,21 +135,28 @@ mod tests {
     async fn drive_to(session: &Session, target: SessionPhase) -> Result<(), TransitionError> {
         match target {
             SessionPhase::Created => Ok(()),
-            SessionPhase::PendingPair => {
-                session.transition(Transition::StartPairing).await.map(|_| ())
-            }
+            SessionPhase::PendingPair => session
+                .transition(Transition::StartPairing)
+                .await
+                .map(|_| ()),
             SessionPhase::Paired => {
                 session.transition(Transition::StartPairing).await?;
-                session.transition(Transition::PairConfirmed).await.map(|_| ())
+                session
+                    .transition(Transition::PairConfirmed)
+                    .await
+                    .map(|_| ())
             }
             SessionPhase::Transferring => {
                 session.transition(Transition::StartPairing).await?;
                 session.transition(Transition::PairConfirmed).await?;
-                session.transition(Transition::TransferStarted).await.map(|_| ())
+                session
+                    .transition(Transition::TransferStarted)
+                    .await
+                    .map(|_| ())
             }
-            terminal @ (SessionPhase::Done
-            | SessionPhase::Cancelled
-            | SessionPhase::Failed) => unreachable!("terminal phases are not drive targets: {terminal:?}"),
+            terminal @ (SessionPhase::Done | SessionPhase::Cancelled | SessionPhase::Failed) => {
+                unreachable!("terminal phases are not drive targets: {terminal:?}")
+            }
         }
     }
 
@@ -174,7 +178,10 @@ mod tests {
         let watcher = session.cancel_watcher();
         assert!(!watcher.is_cancelled());
 
-        let phase = session.cancel().await.expect("cancel from Created succeeds");
+        let phase = session
+            .cancel()
+            .await
+            .expect("cancel from Created succeeds");
         assert_eq!(phase, SessionPhase::Cancelled);
         assert!(watcher.is_cancelled());
     }
@@ -198,7 +205,9 @@ mod tests {
     #[tokio::test]
     async fn session_cancel_from_terminal_errors() {
         let session = Session::new();
-        drive_to(&session, SessionPhase::Transferring).await.unwrap();
+        drive_to(&session, SessionPhase::Transferring)
+            .await
+            .unwrap();
         session.transition(Transition::Completed).await.unwrap();
         assert!(session.cancel().await.is_err());
     }
@@ -228,7 +237,10 @@ mod tests {
         let session = Session::new();
         session.cancel().await.unwrap();
         let mut watcher = session.cancel_watcher();
-        assert!(watcher.is_cancelled(), "fresh subscribe sees the signalled value");
+        assert!(
+            watcher.is_cancelled(),
+            "fresh subscribe sees the signalled value"
+        );
         let outcome = race(&mut watcher, async { 42 }).await;
         assert_eq!(outcome, Race::Cancelled);
     }

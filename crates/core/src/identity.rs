@@ -62,10 +62,18 @@ impl fmt::Display for Error {
                 ENV_CONFIG_DIR
             ),
             Error::ReadKey { path, source } => {
-                write!(f, "failed to read identity key file {}: {source}", path.display())
+                write!(
+                    f,
+                    "failed to read identity key file {}: {source}",
+                    path.display()
+                )
             }
             Error::WriteKey { dir, source } => {
-                write!(f, "failed to write identity key in {}: {source}", dir.display())
+                write!(
+                    f,
+                    "failed to write identity key in {}: {source}",
+                    dir.display()
+                )
             }
         }
     }
@@ -213,14 +221,18 @@ fn load_or_create_key(dir: &Path) -> Result<SecretKey, Error> {
 /// never observes a partial file. Stale temp files from a crashed run are
 /// removed and retried once.
 fn write_key_atomic(dir: &Path, bytes: &[u8; 32]) -> Result<(), Error> {
-    fs::create_dir_all(dir)
-        .map_err(|source| Error::WriteKey { dir: dir.to_path_buf(), source })?;
+    fs::create_dir_all(dir).map_err(|source| Error::WriteKey {
+        dir: dir.to_path_buf(),
+        source,
+    })?;
     let tmp = dir.join(format!(".{KEY_FILE}.{}.tmp", std::process::id()));
     for attempt in 0..2 {
         match write_tmp(&tmp, bytes) {
             Ok(()) => {
-                fs::rename(&tmp, dir.join(KEY_FILE))
-                    .map_err(|source| Error::WriteKey { dir: dir.to_path_buf(), source })?;
+                fs::rename(&tmp, dir.join(KEY_FILE)).map_err(|source| Error::WriteKey {
+                    dir: dir.to_path_buf(),
+                    source,
+                })?;
                 return Ok(());
             }
             // A stale temp from a crashed previous run: remove and retry once.
@@ -228,7 +240,10 @@ fn write_key_atomic(dir: &Path, bytes: &[u8; 32]) -> Result<(), Error> {
                 let _ = fs::remove_file(&tmp);
             }
             Err(source) => {
-                return Err(Error::WriteKey { dir: dir.to_path_buf(), source });
+                return Err(Error::WriteKey {
+                    dir: dir.to_path_buf(),
+                    source,
+                });
             }
         }
     }

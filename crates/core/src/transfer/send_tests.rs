@@ -10,11 +10,11 @@ use std::{
 };
 
 use iroh::RelayMode;
-use iroh_blobs::{format::collection::Collection, BlobFormat};
+use iroh_blobs::{BlobFormat, format::collection::Collection};
 
 use crate::transfer::{
     engine::TransferEngine,
-    send::{walk_files, ProgressEvent, SendError},
+    send::{ProgressEvent, SendError, walk_files},
 };
 
 /// Unique temp dir per test call: isolated from other tests and from other
@@ -69,11 +69,20 @@ fn send_walk_sorts_directory_entries_stably_with_root_prefix() {
     let names: Vec<&str> = files.iter().map(|(name, _)| name.as_str()).collect();
     assert_eq!(
         names,
-        vec!["input/a.txt", "input/m.txt", "input/nested/b.txt", "input/z.txt"],
+        vec![
+            "input/a.txt",
+            "input/m.txt",
+            "input/nested/b.txt",
+            "input/z.txt"
+        ],
         "files sorted by collection name with the input root as prefix"
     );
     for (name, path) in &files {
-        assert!(path.is_file(), "{name} maps to a real file at {}", path.display());
+        assert!(
+            path.is_file(),
+            "{name} maps to a real file at {}",
+            path.display()
+        );
         seen.push(path.clone());
     }
     // Local paths all live under the input dir.
@@ -101,7 +110,10 @@ fn send_walk_missing_path_errors() {
     let dir = temp_dir("walk-missing");
     let missing = dir.join("does-not-exist");
     let err = walk_files(&missing).expect_err("missing path must error");
-    assert!(matches!(err, SendError::MissingSource { .. }), "got {err:?}");
+    assert!(
+        matches!(err, SendError::MissingSource { .. }),
+        "got {err:?}"
+    );
     cleanup(&dir);
 }
 
@@ -109,7 +121,10 @@ fn send_walk_missing_path_errors() {
 fn send_walk_path_without_file_name_errors() {
     // "." and "/" have no file_name, so no root name can be derived.
     let err = walk_files(Path::new(".")).expect_err("'.' has no root name");
-    assert!(matches!(err, SendError::InvalidRootName { .. }), "got {err:?}");
+    assert!(
+        matches!(err, SendError::InvalidRootName { .. }),
+        "got {err:?}"
+    );
 }
 
 #[cfg(unix)]
@@ -124,7 +139,11 @@ fn send_walk_skips_nested_symlink() {
 
     let files = walk_files(&input).expect("walk succeeds");
     let names: Vec<&str> = files.iter().map(|(name, _)| name.as_str()).collect();
-    assert_eq!(names, vec!["input/real.txt"], "symlink skipped, real file kept");
+    assert_eq!(
+        names,
+        vec!["input/real.txt"],
+        "symlink skipped, real file kept"
+    );
     cleanup(&dir);
 }
 
@@ -162,7 +181,12 @@ async fn send_prepare_collects_files_with_correct_sizes() {
     let names: Vec<&str> = prepared.files.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(
         names,
-        vec!["input/a.txt", "input/m.txt", "input/nested/b.txt", "input/z.txt"]
+        vec![
+            "input/a.txt",
+            "input/m.txt",
+            "input/nested/b.txt",
+            "input/z.txt"
+        ]
     );
     let sizes: Vec<u64> = prepared.files.iter().map(|f| f.size).collect();
     assert_eq!(sizes, vec![2, 3, 4, 6], "per-file sizes match the payloads");
@@ -172,9 +196,11 @@ async fn send_prepare_collects_files_with_correct_sizes() {
     let collection = Collection::load(prepared.collection_hash, engine.store())
         .await
         .expect("collection loads from store");
-    let collection_names: Vec<&str> =
-        collection.iter().map(|(name, _)| name.as_str()).collect();
-    assert_eq!(collection_names, names, "collection names match prepared files");
+    let collection_names: Vec<&str> = collection.iter().map(|(name, _)| name.as_str()).collect();
+    assert_eq!(
+        collection_names, names,
+        "collection names match prepared files"
+    );
     for file in &prepared.files {
         let got = engine
             .store()
@@ -202,15 +228,22 @@ async fn send_prepare_hash_is_deterministic_for_same_input() {
     let engine = make_engine(&dir.join("store")).await;
     let paths = vec![input.clone()];
 
-    let first = engine.prepare_send(&paths, &mut |_| {}).await.expect("first prepare");
-    let second = engine.prepare_send(&paths, &mut |_| {}).await.expect("second prepare");
+    let first = engine
+        .prepare_send(&paths, &mut |_| {})
+        .await
+        .expect("first prepare");
+    let second = engine
+        .prepare_send(&paths, &mut |_| {})
+        .await
+        .expect("second prepare");
 
     assert_eq!(
         first.collection_hash, second.collection_hash,
         "same input must produce the same collection hash"
     );
     assert_eq!(
-        first.ticket.hash(), second.ticket.hash(),
+        first.ticket.hash(),
+        second.ticket.hash(),
         "tickets hash the same collection"
     );
 
@@ -257,7 +290,11 @@ async fn send_prepare_skips_symlink_with_warning() {
         .await
         .expect("prepare succeeds");
     let names: Vec<&str> = prepared.files.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(names, vec!["input/real.txt"], "symlink skipped, real file kept");
+    assert_eq!(
+        names,
+        vec!["input/real.txt"],
+        "symlink skipped, real file kept"
+    );
     assert_eq!(prepared.total_bytes, 4);
 
     engine.shutdown().await.expect("clean shutdown");
@@ -343,7 +380,12 @@ async fn send_prepare_emits_progress_events() {
         .collect();
     assert_eq!(
         imported,
-        vec!["input/a.txt", "input/m.txt", "input/nested/b.txt", "input/z.txt"]
+        vec![
+            "input/a.txt",
+            "input/m.txt",
+            "input/nested/b.txt",
+            "input/z.txt"
+        ]
     );
 
     engine.shutdown().await.expect("clean shutdown");
@@ -388,7 +430,11 @@ async fn send_prepare_ticket_roundtrips_and_points_at_collection() {
         ticket.to_string().parse().expect("ticket parses back");
     assert_eq!(parsed.hash(), ticket.hash());
     assert_eq!(parsed.hash(), prepared.collection_hash);
-    assert_eq!(parsed.format(), BlobFormat::HashSeq, "collection ticket is a hash seq");
+    assert_eq!(
+        parsed.format(),
+        BlobFormat::HashSeq,
+        "collection ticket is a hash seq"
+    );
     assert_eq!(
         parsed.addr().id,
         engine.endpoint().id(),

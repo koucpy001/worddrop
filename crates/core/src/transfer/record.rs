@@ -67,8 +67,7 @@ impl TransferRecord {
     /// hash and target dir. A mismatched record (different target dir) is not
     /// resumed.
     pub fn matches(&self, collection_hash: Hash, target_dir: &Path) -> bool {
-        self.collection_hash == collection_hash
-            && self.target_dir == target_dir.to_string_lossy()
+        self.collection_hash == collection_hash && self.target_dir == target_dir.to_string_lossy()
     }
 }
 
@@ -86,7 +85,9 @@ pub struct RecordStore {
 impl RecordStore {
     /// Store rooted at `<data_dir>/transfers`.
     pub fn new(data_dir: &Path) -> Self {
-        Self { dir: data_dir.join(TRANSFERS_DIR) }
+        Self {
+            dir: data_dir.join(TRANSFERS_DIR),
+        }
     }
 
     /// The directory holding the records.
@@ -171,10 +172,8 @@ mod tests {
     }
 
     fn temp_dir(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "my-croc-record-test-{tag}-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("my-croc-record-test-{tag}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("create temp dir");
         dir
@@ -211,7 +210,10 @@ mod tests {
             .map(|entry| entry.file_name().into_string().unwrap_or_default())
             .filter(|name| name.ends_with(".tmp"))
             .collect();
-        assert!(leftovers.is_empty(), "no temp files left behind: {leftovers:?}");
+        assert!(
+            leftovers.is_empty(),
+            "no temp files left behind: {leftovers:?}"
+        );
         // The final file is a complete, parseable JSON record.
         let content = fs::read_to_string(store.path(&hash())).expect("read record");
         let parsed: TransferRecord = serde_json::from_str(&content).expect("valid JSON");
@@ -227,7 +229,10 @@ mod tests {
         fs::create_dir_all(store.dir()).expect("records dir");
         fs::write(store.path(&hash()), b"{ not json !!!").expect("write garbage");
 
-        assert!(store.load(&hash(), &dir).await.is_none(), "corrupt record -> None");
+        assert!(
+            store.load(&hash(), &dir).await.is_none(),
+            "corrupt record -> None"
+        );
 
         fs::remove_dir_all(&dir).expect("cleanup");
     }
@@ -255,7 +260,10 @@ mod tests {
 
         store.delete(&hash()).await.expect("delete record");
         assert!(!store.path(&hash()).exists(), "record file removed");
-        store.delete(&hash()).await.expect("deleting a missing record is fine");
+        store
+            .delete(&hash())
+            .await
+            .expect("deleting a missing record is fine");
 
         fs::remove_dir_all(&dir).expect("cleanup");
     }

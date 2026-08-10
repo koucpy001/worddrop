@@ -11,11 +11,11 @@ use std::{
 };
 
 use iroh::RelayMode;
-use iroh_blobs::{ticket::BlobTicket, BlobFormat};
+use iroh_blobs::{BlobFormat, ticket::BlobTicket};
 
 use crate::transfer::{
     engine::TransferEngine,
-    receive::{export_target, ReceiveError, ReceiveOptions, ReceiveProgress},
+    receive::{ReceiveError, ReceiveOptions, ReceiveProgress, export_target},
 };
 
 /// Unique temp dir per test call: isolated from other tests and from other
@@ -74,7 +74,10 @@ async fn make_engine(dir: &Path) -> TransferEngine {
         .expect("engine init")
 }
 
-async fn prepare(engine: &TransferEngine, input: &PathBuf) -> crate::transfer::send::PreparedTransfer {
+async fn prepare(
+    engine: &TransferEngine,
+    input: &PathBuf,
+) -> crate::transfer::send::PreparedTransfer {
     engine
         .prepare_send(std::slice::from_ref(input), &mut |_| {})
         .await
@@ -98,14 +101,23 @@ async fn receive_e2e_pair_downloads_and_exports_byte_for_byte() {
     let result = receiver
         .receive(
             &prepared.ticket,
-            ReceiveOptions { target_dir: target.clone(), overwrite: false },
+            ReceiveOptions {
+                target_dir: target.clone(),
+                overwrite: false,
+            },
             &mut |_| {},
         )
         .await
         .expect("receive succeeds");
-    assert_eq!(result.bytes, prepared.total_bytes, "all payload bytes exported");
+    assert_eq!(
+        result.bytes, prepared.total_bytes,
+        "all payload bytes exported"
+    );
     assert_eq!(result.files, prepared.files.len(), "every file exported");
-    assert!(result.skipped.is_empty(), "nothing skipped on a fresh target");
+    assert!(
+        result.skipped.is_empty(),
+        "nothing skipped on a fresh target"
+    );
 
     let expected: Vec<(&str, &[u8])> = vec![
         ("input/a.txt", b"aa"),
@@ -141,27 +153,43 @@ async fn receive_emits_monotonic_download_progress_then_done() {
     let result = receiver
         .receive(
             &prepared.ticket,
-            ReceiveOptions { target_dir: dir.join("out"), overwrite: false },
+            ReceiveOptions {
+                target_dir: dir.join("out"),
+                overwrite: false,
+            },
             &mut |event| events.push(event),
         )
         .await
         .expect("receive succeeds");
 
-    assert_eq!(events.first(), Some(&ReceiveProgress::Connecting), "dial first");
+    assert_eq!(
+        events.first(),
+        Some(&ReceiveProgress::Connecting),
+        "dial first"
+    );
 
     let mut last_received = 0u64;
     let mut downloads = 0usize;
     for event in &events {
         if let ReceiveProgress::Downloading { received, total } = event {
             downloads += 1;
-            assert_eq!(*total, prepared.total_bytes, "progress total is the payload size");
+            assert_eq!(
+                *total, prepared.total_bytes,
+                "progress total is the payload size"
+            );
             assert!(*received >= last_received, "received bytes are monotonic");
             assert!(*received <= *total, "received never exceeds total");
             last_received = *received;
         }
     }
-    assert!(downloads > 0, "a multi-MiB transfer must produce download progress");
-    assert_eq!(last_received, prepared.total_bytes, "progress reaches the total");
+    assert!(
+        downloads > 0,
+        "a multi-MiB transfer must produce download progress"
+    );
+    assert_eq!(
+        last_received, prepared.total_bytes,
+        "progress reaches the total"
+    );
 
     let exporting: Vec<&str> = events
         .iter()
@@ -172,11 +200,19 @@ async fn receive_emits_monotonic_download_progress_then_done() {
         .collect();
     assert_eq!(
         exporting,
-        vec!["input/a.txt", "input/m.txt", "input/nested/b.txt", "input/z.txt"]
+        vec![
+            "input/a.txt",
+            "input/m.txt",
+            "input/nested/b.txt",
+            "input/z.txt"
+        ]
     );
     assert_eq!(
         events.last(),
-        Some(&ReceiveProgress::Done { bytes: result.bytes, files: result.files })
+        Some(&ReceiveProgress::Done {
+            bytes: result.bytes,
+            files: result.files
+        })
     );
     assert_eq!(result.bytes, prepared.total_bytes);
     assert_eq!(result.files, 4);
@@ -208,7 +244,10 @@ async fn receive_from_dead_peer_emits_error_event() {
         Duration::from_secs(60),
         receiver.receive(
             &dead_ticket,
-            ReceiveOptions { target_dir: dir.join("out"), overwrite: false },
+            ReceiveOptions {
+                target_dir: dir.join("out"),
+                overwrite: false,
+            },
             &mut |event| events.push(event),
         ),
     )
@@ -223,10 +262,17 @@ async fn receive_from_dead_peer_emits_error_event() {
     // receive flow's own CONNECT_TIMEOUT fires (a fast local error is also
     // possible on platforms that surface ICMP port-unreachable).
     assert!(
-        matches!(&err, ReceiveError::Connect { .. } | ReceiveError::ConnectTimeout),
+        matches!(
+            &err,
+            ReceiveError::Connect { .. } | ReceiveError::ConnectTimeout
+        ),
         "got {err:?}"
     );
-    assert_eq!(events.last(), Some(&ReceiveProgress::Error), "error event emitted");
+    assert_eq!(
+        events.last(),
+        Some(&ReceiveProgress::Error),
+        "error event emitted"
+    );
     assert!(
         matches!(events.first(), Some(ReceiveProgress::Connecting)),
         "the dial was attempted before the failure"
@@ -253,7 +299,10 @@ async fn receive_conflict_policy_skips_without_overwrite_replaces_with_overwrite
     let first = receiver
         .receive(
             &prepared.ticket,
-            ReceiveOptions { target_dir: target.clone(), overwrite: false },
+            ReceiveOptions {
+                target_dir: target.clone(),
+                overwrite: false,
+            },
             &mut |_| {},
         )
         .await
@@ -271,7 +320,10 @@ async fn receive_conflict_policy_skips_without_overwrite_replaces_with_overwrite
     let second = receiver
         .receive(
             &prepared.ticket,
-            ReceiveOptions { target_dir: target.clone(), overwrite: false },
+            ReceiveOptions {
+                target_dir: target.clone(),
+                overwrite: false,
+            },
             &mut |event| events.push(event),
         )
         .await
@@ -283,11 +335,20 @@ async fn receive_conflict_policy_skips_without_overwrite_replaces_with_overwrite
     );
     assert_eq!(second.files, 1, "only the deleted file is exported");
     assert_eq!(second.bytes, 2, "only the re-exported file's bytes counted");
-    assert_eq!(fs::read(&z_path).expect("read target"), b"EVIL", "skipped file untouched");
-    assert_eq!(fs::read(target.join("input/a.txt")).expect("read target"), b"aa");
+    assert_eq!(
+        fs::read(&z_path).expect("read target"),
+        b"EVIL",
+        "skipped file untouched"
+    );
+    assert_eq!(
+        fs::read(target.join("input/a.txt")).expect("read target"),
+        b"aa"
+    );
     assert!(
-        events.iter().all(|event| !matches!(event, ReceiveProgress::Connecting)
-            && !matches!(event, ReceiveProgress::Downloading { .. })),
+        events
+            .iter()
+            .all(|event| !matches!(event, ReceiveProgress::Connecting)
+                && !matches!(event, ReceiveProgress::Downloading { .. })),
         "data already complete: re-receive does not dial or download"
     );
 
@@ -295,15 +356,25 @@ async fn receive_conflict_policy_skips_without_overwrite_replaces_with_overwrite
     let third = receiver
         .receive(
             &prepared.ticket,
-            ReceiveOptions { target_dir: target.clone(), overwrite: true },
+            ReceiveOptions {
+                target_dir: target.clone(),
+                overwrite: true,
+            },
             &mut |_| {},
         )
         .await
         .expect("third receive");
-    assert!(third.skipped.is_empty(), "overwrite replaces instead of skipping");
+    assert!(
+        third.skipped.is_empty(),
+        "overwrite replaces instead of skipping"
+    );
     assert_eq!(third.files, 4);
     assert_eq!(third.bytes, 15);
-    assert_eq!(fs::read(&z_path).expect("read target"), b"zzzzzz", "file restored");
+    assert_eq!(
+        fs::read(&z_path).expect("read target"),
+        b"zzzzzz",
+        "file restored"
+    );
 
     sender.shutdown().await.expect("sender shutdown");
     receiver.shutdown().await.expect("receiver shutdown");
@@ -328,7 +399,10 @@ async fn receive_empty_collection_exports_nothing() {
     let result = receiver
         .receive(
             &prepared.ticket,
-            ReceiveOptions { target_dir: dir.join("out"), overwrite: false },
+            ReceiveOptions {
+                target_dir: dir.join("out"),
+                overwrite: false,
+            },
             &mut |event| events.push(event),
         )
         .await
@@ -336,7 +410,10 @@ async fn receive_empty_collection_exports_nothing() {
     assert_eq!(result.bytes, 0);
     assert_eq!(result.files, 0);
     assert!(result.skipped.is_empty());
-    assert_eq!(events.last(), Some(&ReceiveProgress::Done { bytes: 0, files: 0 }));
+    assert_eq!(
+        events.last(),
+        Some(&ReceiveProgress::Done { bytes: 0, files: 0 })
+    );
 
     sender.shutdown().await.expect("sender shutdown");
     receiver.shutdown().await.expect("receiver shutdown");
@@ -346,8 +423,14 @@ async fn receive_empty_collection_exports_nothing() {
 #[test]
 fn receive_export_target_validates_collection_names() {
     let root = Path::new("/tmp/root");
-    assert_eq!(export_target(root, "a/b.txt").expect("nested ok"), root.join("a/b.txt"));
-    assert_eq!(export_target(root, "solo.txt").expect("flat ok"), root.join("solo.txt"));
+    assert_eq!(
+        export_target(root, "a/b.txt").expect("nested ok"),
+        root.join("a/b.txt")
+    );
+    assert_eq!(
+        export_target(root, "solo.txt").expect("flat ok"),
+        root.join("solo.txt")
+    );
 
     for bad in ["../evil", "a/../evil", "a//b", "/abs", "a/", "", "a\\b"] {
         let err = export_target(root, bad).expect_err("unsafe name must be rejected");

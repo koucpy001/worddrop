@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use clap::{error::ErrorKind, CommandFactory, Parser};
+use clap::{CommandFactory, Parser, error::ErrorKind};
 
 use super::{Cli, Commands, ReceiveArgs};
 
@@ -30,8 +30,14 @@ fn parse_send_requires_at_least_one_path() {
 
 #[test]
 fn parse_receive_code_and_output() {
-    let cli = parse(&["receive", "--code", "7-correct-horse-battery", "--output", "dl"])
-        .expect("parses");
+    let cli = parse(&[
+        "receive",
+        "--code",
+        "7-correct-horse-battery",
+        "--output",
+        "dl",
+    ])
+    .expect("parses");
     match cli.command {
         Commands::Receive(args) => {
             assert_eq!(args.code.as_deref(), Some("7-correct-horse-battery"));

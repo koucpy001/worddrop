@@ -71,7 +71,9 @@ pub(crate) fn export_target(root: &Path, name: &str) -> Result<PathBuf, ReceiveE
     let mut target = root.to_path_buf();
     for part in name.split('/') {
         if part.is_empty() || part == "." || part == ".." || part.contains('\\') {
-            return Err(ReceiveError::InvalidCollectionName { name: name.to_string() });
+            return Err(ReceiveError::InvalidCollectionName {
+                name: name.to_string(),
+            });
         }
         target.push(part);
     }
@@ -132,7 +134,9 @@ impl TransferEngine {
             .save(&record)
             .await
             .map_err(|source| ReceiveError::RecordSave { path, source })?;
-        let result = self.receive_impl(ticket, options, progress, Some(&mut record)).await?;
+        let result = self
+            .receive_impl(ticket, options, progress, Some(&mut record))
+            .await?;
         // Record deleted after success; a failed delete only leaves a stale
         // record that the next receive treats as done and removes.
         if let Err(source) = records.delete(&hash).await {

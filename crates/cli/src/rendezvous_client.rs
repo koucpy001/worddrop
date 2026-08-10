@@ -73,7 +73,10 @@ impl fmt::Display for RvError {
         // copy rule; the English half keeps the historical wording.
         match self {
             Self::Http { status, body } => {
-                write!(f, "服务器返回 {status}: {body} / rendezvous HTTP {status}: {body}")
+                write!(
+                    f,
+                    "服务器返回 {status}: {body} / rendezvous HTTP {status}: {body}"
+                )
             }
             Self::Io(err) => write!(f, "服务器连接错误 / rendezvous io error: {err}"),
             Self::Timeout => write!(
@@ -83,7 +86,10 @@ impl fmt::Display for RvError {
                 REQUEST_TIMEOUT.as_secs()
             ),
             Self::Parse { kind, body } => {
-                write!(f, "解析 {kind} 响应失败 / failed to parse {kind} response: {body}")
+                write!(
+                    f,
+                    "解析 {kind} 响应失败 / failed to parse {kind} response: {body}"
+                )
             }
         }
     }
@@ -107,7 +113,9 @@ pub struct RvClient {
 impl RvClient {
     /// `base` is the server origin, e.g. `http://127.0.0.1:8080`.
     pub fn new(base: &str) -> Self {
-        Self { base: base.to_string() }
+        Self {
+            base: base.to_string(),
+        }
     }
 
     /// Allocate a nameplate for `ticket` (POST /v1/pairs).
@@ -115,10 +123,16 @@ impl RvClient {
         let body = serde_json::json!({ "ticket": ticket }).to_string();
         let (status, response) = self.request("POST", "/v1/pairs", Some(&body)).await?;
         if status != 201 {
-            return Err(RvError::Http { status, body: response });
+            return Err(RvError::Http {
+                status,
+                body: response,
+            });
         }
-        let allocation: AllocateResponse = serde_json::from_str(&response)
-            .map_err(|_| RvError::Parse { kind: "allocate", body: response })?;
+        let allocation: AllocateResponse =
+            serde_json::from_str(&response).map_err(|_| RvError::Parse {
+                kind: "allocate",
+                body: response,
+            })?;
         Ok(Allocation {
             nameplate: allocation.nameplate,
             expires_at: allocation.expires_at,
@@ -128,27 +142,42 @@ impl RvClient {
     /// One-shot claim: returns the stored ticket, or the server's error
     /// (404 = already claimed / never existed, 410 = expired).
     pub async fn claim(&self, nameplate: u32) -> Result<String, RvError> {
-        let (status, response) =
-            self.request("POST", &format!("/v1/pairs/{nameplate}/claim"), None).await?;
+        let (status, response) = self
+            .request("POST", &format!("/v1/pairs/{nameplate}/claim"), None)
+            .await?;
         if status != 200 {
-            return Err(RvError::Http { status, body: response });
+            return Err(RvError::Http {
+                status,
+                body: response,
+            });
         }
-        let value: ClaimResponse = serde_json::from_str(&response)
-            .map_err(|_| RvError::Parse { kind: "claim", body: response })?;
+        let value: ClaimResponse = serde_json::from_str(&response).map_err(|_| RvError::Parse {
+            kind: "claim",
+            body: response,
+        })?;
         Ok(value.ticket)
     }
 
     /// Poll the lifecycle of a nameplate (GET /v1/pairs/{n}/status).
     pub async fn status(&self, nameplate: u32) -> Result<PairState, RvError> {
-        let (status, response) =
-            self.request("GET", &format!("/v1/pairs/{nameplate}/status"), None).await?;
+        let (status, response) = self
+            .request("GET", &format!("/v1/pairs/{nameplate}/status"), None)
+            .await?;
         if status != 200 {
-            return Err(RvError::Http { status, body: response });
+            return Err(RvError::Http {
+                status,
+                body: response,
+            });
         }
-        let value: StatusResponse = serde_json::from_str(&response)
-            .map_err(|_| RvError::Parse { kind: "status", body: response.clone() })?;
-        PairState::from_str(&value.state)
-            .ok_or(RvError::Parse { kind: "status state", body: response })
+        let value: StatusResponse =
+            serde_json::from_str(&response).map_err(|_| RvError::Parse {
+                kind: "status",
+                body: response.clone(),
+            })?;
+        PairState::from_str(&value.state).ok_or(RvError::Parse {
+            kind: "status state",
+            body: response,
+        })
     }
 
     /// GET /health; Ok when the server answers "ok".
@@ -157,7 +186,10 @@ impl RvClient {
         if status == 200 && response.trim() == "ok" {
             Ok(())
         } else {
-            Err(RvError::Http { status, body: response })
+            Err(RvError::Http {
+                status,
+                body: response,
+            })
         }
     }
 
@@ -197,9 +229,15 @@ impl RvClient {
         if let Some(body) = body {
             request.push_str(body);
         }
-        stream.write_all(request.as_bytes()).await.map_err(RvError::Io)?;
+        stream
+            .write_all(request.as_bytes())
+            .await
+            .map_err(RvError::Io)?;
         let mut response = Vec::new();
-        stream.read_to_end(&mut response).await.map_err(RvError::Io)?;
+        stream
+            .read_to_end(&mut response)
+            .await
+            .map_err(RvError::Io)?;
         let text = String::from_utf8_lossy(&response).into_owned();
         let (head, body) = text.split_once("\r\n\r\n").ok_or_else(|| RvError::Parse {
             kind: "response head",

@@ -5,15 +5,15 @@ use std::{
     fs,
     path::PathBuf,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Mutex,
+        atomic::{AtomicU64, Ordering},
     },
 };
 
 use iroh::SecretKey;
 use my_croc_core::identity::{
-    Config, Error, Identity, DEFAULT_RELAY_URL, DEFAULT_RENDEZVOUS_URL, ENV_CONFIG_DIR,
-    ENV_DATA_DIR, ENV_RELAY_URL, ENV_RENDEZVOUS_URL,
+    Config, DEFAULT_RELAY_URL, DEFAULT_RENDEZVOUS_URL, ENV_CONFIG_DIR, ENV_DATA_DIR, ENV_RELAY_URL,
+    ENV_RENDEZVOUS_URL, Error, Identity,
 };
 
 /// Unique temp dir per test call: isolated from other tests and from other
@@ -38,7 +38,10 @@ fn temp_dir(tag: &str) -> PathBuf {
 #[cfg(unix)]
 fn file_mode(path: &PathBuf) -> u32 {
     use std::os::unix::fs::PermissionsExt;
-    fs::metadata(path).expect("stat key file").permissions().mode()
+    fs::metadata(path)
+        .expect("stat key file")
+        .permissions()
+        .mode()
 }
 
 fn cleanup(dir: &PathBuf) {
@@ -55,7 +58,11 @@ fn identity_first_run_creates_key_file_with_0600_perms() {
     let bytes = fs::read(&path).expect("read key file");
     assert_eq!(bytes.len(), 32, "key file holds the raw 32-byte seed");
     #[cfg(unix)]
-    assert_eq!(file_mode(&path) & 0o777, 0o600, "key file must be 0600 on unix");
+    assert_eq!(
+        file_mode(&path) & 0o777,
+        0o600,
+        "key file must be 0600 on unix"
+    );
     assert_eq!(
         identity.node_id(),
         SecretKey::from_bytes(&bytes.try_into().expect("32 bytes")).public(),
@@ -70,8 +77,16 @@ fn identity_second_run_loads_same_key() {
     let first = Identity::load_or_create(&dir).expect("first run");
     let second = Identity::load_or_create(&dir).expect("second run");
 
-    assert_eq!(first.key_bytes(), second.key_bytes(), "key must be stable across runs");
-    assert_eq!(first.node_id(), second.node_id(), "NodeId must be stable across runs");
+    assert_eq!(
+        first.key_bytes(),
+        second.key_bytes(),
+        "key must be stable across runs"
+    );
+    assert_eq!(
+        first.node_id(),
+        second.node_id(),
+        "NodeId must be stable across runs"
+    );
     cleanup(&dir);
 }
 
@@ -82,7 +97,11 @@ fn identity_corrupt_key_file_is_regenerated_with_warning() {
     fs::write(Identity::key_path(&dir), b"garbage-not-32-bytes").expect("write garbage");
     let identity = Identity::load_or_create(&dir).expect("regenerate on corrupt file");
     let bytes = fs::read(Identity::key_path(&dir)).expect("read regenerated key");
-    assert_eq!(bytes.len(), 32, "corrupt file must be replaced with a valid key");
+    assert_eq!(
+        bytes.len(),
+        32,
+        "corrupt file must be replaced with a valid key"
+    );
     assert_eq!(
         identity.node_id(),
         SecretKey::from_bytes(&bytes.try_into().expect("32 bytes")).public()
@@ -107,7 +126,12 @@ fn identity_any_32_byte_seed_is_accepted_as_the_key() {
 #[test]
 fn identity_config_defaults_are_correct() {
     let _guard = ENV_LOCK.lock().expect("env lock");
-    for var in [ENV_CONFIG_DIR, ENV_DATA_DIR, ENV_RENDEZVOUS_URL, ENV_RELAY_URL] {
+    for var in [
+        ENV_CONFIG_DIR,
+        ENV_DATA_DIR,
+        ENV_RENDEZVOUS_URL,
+        ENV_RELAY_URL,
+    ] {
         // Safety: env mutation is serialized under ENV_LOCK.
         unsafe { std::env::remove_var(var) };
     }
@@ -136,9 +160,15 @@ fn identity_my_croc_config_dir_env_override_works() {
             "override replaces the platform config dir"
         );
         let cfg = Config::load()?;
-        assert_eq!(cfg.data_dir, dir, "data dir follows the config dir override");
+        assert_eq!(
+            cfg.data_dir, dir,
+            "data dir follows the config dir override"
+        );
         let identity = Identity::load_or_create(&dir)?;
-        assert!(Identity::key_path(&dir).exists(), "key lands in the override dir");
+        assert!(
+            Identity::key_path(&dir).exists(),
+            "key lands in the override dir"
+        );
         assert_eq!(identity.key_bytes().len(), 32);
         Ok(())
     })();

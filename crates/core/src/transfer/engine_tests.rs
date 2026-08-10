@@ -11,11 +11,11 @@ use std::{
 };
 
 use iroh::RelayMode;
-use iroh_blobs::{protocol::GetRequest, BlobFormat, HashAndFormat};
+use iroh_blobs::{BlobFormat, HashAndFormat, protocol::GetRequest};
 
 use crate::{
     identity::Config,
-    transfer::engine::{Error, TransferEngine, BLOBS_DIR},
+    transfer::engine::{BLOBS_DIR, Error, TransferEngine},
 };
 
 /// Unique temp dir per test call: isolated from other tests and from other
@@ -60,7 +60,11 @@ async fn init_creates_endpoint_and_store_in_temp_dir() {
     // The store handle is usable: local add + read round trip.
     let data = b"hello engine".to_vec();
     let tag = engine.store().add_slice(&data).await.expect("add slice");
-    let got = engine.store().get_bytes(tag.hash).await.expect("read slice");
+    let got = engine
+        .store()
+        .get_bytes(tag.hash)
+        .await
+        .expect("read slice");
     assert_eq!(got.as_ref(), data.as_slice(), "store round-trips bytes");
 
     engine.shutdown().await.expect("clean shutdown");
@@ -93,7 +97,10 @@ async fn init_with_file_data_dir_is_error() {
         Err(err) => err,
         Ok(_) => panic!("store load over a file path must fail"),
     };
-    assert!(matches!(err, Error::DataDirNotDirectory { .. }), "got {err:?}");
+    assert!(
+        matches!(err, Error::DataDirNotDirectory { .. }),
+        "got {err:?}"
+    );
     cleanup(&dir);
 }
 
@@ -109,7 +116,11 @@ async fn two_engines_exchange_blob_over_direct_connection() {
         .expect("receiver engine");
 
     let data = payload(64 * 1024);
-    let tag = sender.store().add_slice(&data).await.expect("sender adds blob");
+    let tag = sender
+        .store()
+        .add_slice(&data)
+        .await
+        .expect("sender adds blob");
 
     // Direct local connection (no relay anywhere): connect by the sender's
     // bound address and run a real blobs-protocol round trip.
@@ -135,7 +146,11 @@ async fn two_engines_exchange_blob_over_direct_connection() {
         .get_bytes(tag.hash)
         .await
         .expect("read received blob");
-    assert_eq!(got.as_ref(), data.as_slice(), "payload round-trips byte-for-byte");
+    assert_eq!(
+        got.as_ref(),
+        data.as_slice(),
+        "payload round-trips byte-for-byte"
+    );
 
     sender.shutdown().await.expect("sender shutdown");
     receiver.shutdown().await.expect("receiver shutdown");
@@ -162,8 +177,15 @@ async fn resume_spike_partial_download_then_reget_fetches_only_missing() {
 
     let size = 16 * 1024 * 1024; // 16 MiB: needs tens of ms on loopback
     let data = payload(size);
-    let tag = sender.store().add_slice(&data).await.expect("sender adds blob");
-    let hash_and_format = HashAndFormat { hash: tag.hash, format: BlobFormat::Raw };
+    let tag = sender
+        .store()
+        .add_slice(&data)
+        .await
+        .expect("sender adds blob");
+    let hash_and_format = HashAndFormat {
+        hash: tag.hash,
+        format: BlobFormat::Raw,
+    };
 
     // Step 1: start a full download, abort once half is in the store, then
     // drop the connection (simulated interruption).
@@ -180,7 +202,12 @@ async fn resume_spike_partial_download_then_reget_fetches_only_missing() {
     let half = size / 2;
     let deadline = Instant::now() + Duration::from_secs(120);
     loop {
-        let local = receiver.store().remote().local(hash_and_format).await.expect("store state");
+        let local = receiver
+            .store()
+            .remote()
+            .local(hash_and_format)
+            .await
+            .expect("store state");
         if local.local_bytes() >= half {
             break;
         }
@@ -191,7 +218,12 @@ async fn resume_spike_partial_download_then_reget_fetches_only_missing() {
     let _ = task.await;
 
     // Step 2: what actually landed in the store?
-    let partial = receiver.store().remote().local(hash_and_format).await.expect("store state");
+    let partial = receiver
+        .store()
+        .remote()
+        .local(hash_and_format)
+        .await
+        .expect("store state");
     let landed = partial.local_bytes();
     assert!(
         (half..size).contains(&landed),
@@ -215,11 +247,20 @@ async fn resume_spike_partial_download_then_reget_fetches_only_missing() {
     let re_fetched = stats2.total_bytes_read();
 
     // The re-get must complete the blob...
-    let done = receiver.store().remote().local(hash_and_format).await.expect("store state");
+    let done = receiver
+        .store()
+        .remote()
+        .local(hash_and_format)
+        .await
+        .expect("store state");
     assert!(done.is_complete(), "blob complete after re-get");
 
     // ...with the payload intact...
-    let got = receiver.store().get_bytes(tag.hash).await.expect("read blob");
+    let got = receiver
+        .store()
+        .get_bytes(tag.hash)
+        .await
+        .expect("read blob");
     assert_eq!(got.as_ref(), data.as_slice(), "payload intact after resume");
 
     // ...and without a full re-fetch: a re-fetch of everything would read the
@@ -272,12 +313,18 @@ async fn served_bytes_tracks_payload_served_to_receiver() {
     assert_eq!(sender.served_bytes(), 0, "no requests yet");
 
     let mut cb: Box<dyn FnMut(ProgressEvent) + Send> = Box::new(|_| {});
-    let prepared = sender.prepare_send(&[file], cb.as_mut()).await.expect("prepare");
+    let prepared = sender
+        .prepare_send(&[file], cb.as_mut())
+        .await
+        .expect("prepare");
     let total = prepared.total_bytes;
     let result = receiver
         .receive(
             &prepared.ticket,
-            ReceiveOptions { target_dir: output.clone(), overwrite: false },
+            ReceiveOptions {
+                target_dir: output.clone(),
+                overwrite: false,
+            },
             &mut |_| {},
         )
         .await

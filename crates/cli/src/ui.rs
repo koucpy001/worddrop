@@ -149,13 +149,19 @@ impl PlainBar {
 
     pub fn set_position(&mut self, position: u64) {
         if let Some((_, speed)) = self.report_line(position) {
-            eprintln!("{}", progress_line_with_speed(&self.msg, position, self.total, speed));
+            eprintln!(
+                "{}",
+                progress_line_with_speed(&self.msg, position, self.total, speed)
+            );
         }
     }
 
     pub fn finish_and_clear(&mut self) {
         if let Some((_, speed)) = self.report_line(self.total) {
-            eprintln!("{}", progress_line_with_speed(&self.msg, self.total, self.total, speed));
+            eprintln!(
+                "{}",
+                progress_line_with_speed(&self.msg, self.total, self.total, speed)
+            );
         }
     }
 
@@ -206,7 +212,11 @@ pub fn progress_line(msg: &str, position: u64, total: u64) -> String {
         .checked_mul(100)
         .and_then(|n| n.checked_div(total))
         .unwrap_or(100);
-    format!("{msg}: {} / {} ({percent}%)", human_bytes(position), human_bytes(total))
+    format!(
+        "{msg}: {} / {} ({percent}%)",
+        human_bytes(position),
+        human_bytes(total)
+    )
 }
 
 /// [`progress_line`] plus the measured transfer speed and a remaining-time
@@ -249,7 +259,10 @@ impl SendUi {
 
     /// Construct with an explicit terminal mode (tests pin both branches).
     pub fn with_terminal_mode(interactive: bool) -> Self {
-        Self { mp: MultiProgress::new(), plain: !interactive }
+        Self {
+            mp: MultiProgress::new(),
+            plain: !interactive,
+        }
     }
 
     /// Whether this UI prints plain lines (stderr was not a terminal).

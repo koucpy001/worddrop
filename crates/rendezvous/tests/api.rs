@@ -12,9 +12,7 @@ use std::time::Duration;
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Method, Request, StatusCode, header};
-use my_croc_rendezvous::{
-    ACCESS_LIMIT_PER_MINUTE, CREATE_LIMIT_PER_MINUTE, AppState, app,
-};
+use my_croc_rendezvous::{ACCESS_LIMIT_PER_MINUTE, AppState, CREATE_LIMIT_PER_MINUTE, app};
 use serde::Deserialize;
 use serde_json::Value;
 use tower::ServiceExt;
@@ -366,7 +364,12 @@ async fn status_unknown_nameplate_returns_404() {
 
     let status = app
         .clone()
-        .oneshot(request(&Method::GET, "/v1/pairs/9999/status", ip_a(), Body::empty()))
+        .oneshot(request(
+            &Method::GET,
+            "/v1/pairs/9999/status",
+            ip_a(),
+            Body::empty(),
+        ))
         .await
         .expect("status");
     assert_eq!(status.status(), StatusCode::NOT_FOUND);

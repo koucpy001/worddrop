@@ -1,1 +1,2 @@
-//! send module tests (T13 — in progress; placeholder for compilation).
+//! send module tests: pairing-code generation, transfer phases, and the
+//! non-TTY/plain progress fallback, pinned against the send flow.

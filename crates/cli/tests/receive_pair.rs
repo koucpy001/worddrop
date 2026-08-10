@@ -81,7 +81,10 @@ async fn spawn_rendezvous() -> (String, JoinHandle<()>) {
         if client.health().await.is_ok() {
             break;
         }
-        assert!(std::time::Instant::now() < deadline, "rendezvous not healthy");
+        assert!(
+            std::time::Instant::now() < deadline,
+            "rendezvous not healthy"
+        );
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     (url, handle)
@@ -91,7 +94,10 @@ async fn spawn_rendezvous() -> (String, JoinHandle<()>) {
 /// on loopback.
 async fn sender_engine(
     data_dir: &PathBuf,
-) -> (TransferEngine, mpsc::UnboundedReceiver<iroh::endpoint::Connection>) {
+) -> (
+    TransferEngine,
+    mpsc::UnboundedReceiver<iroh::endpoint::Connection>,
+) {
     let (control_tx, control_rx) = mpsc::unbounded_channel();
     let acceptor: Box<dyn iroh::protocol::DynProtocolHandler> =
         ControlAcceptor::new(control_tx).into();
@@ -122,9 +128,7 @@ async fn start_sender(
     rv_url: &str,
     paths: Vec<PathBuf>,
 ) -> (
-    std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<SenderDone, String>>>,
-    >,
+    std::pin::Pin<Box<dyn std::future::Future<Output = Result<SenderDone, String>>>>,
     PairInfo,
 ) {
     let (code_tx, mut code_rx) = mpsc::channel(1);
@@ -200,10 +204,9 @@ async fn run_fake_sender(
         .await
         .map_err(|err| format!("accept_bi failed: {err}"))?;
 
-    let hello =
-        recv_message_timeout(&mut recv, HANDSHAKE_TIMEOUT, "sender hello")
-            .await
-            .map_err(|err| err.to_string())?;
+    let hello = recv_message_timeout(&mut recv, HANDSHAKE_TIMEOUT, "sender hello")
+        .await
+        .map_err(|err| err.to_string())?;
     let ControlMessage::Hello { .. } = &hello else {
         return Err("expected hello".to_string());
     };
@@ -236,21 +239,17 @@ async fn run_fake_sender(
         .await
         .map_err(|err| err.to_string())?;
 
-    let response =
-        recv_message_timeout(&mut recv, HANDSHAKE_TIMEOUT, "receiver response")
-            .await
-            .map_err(|err| err.to_string())?;
+    let response = recv_message_timeout(&mut recv, HANDSHAKE_TIMEOUT, "receiver response")
+        .await
+        .map_err(|err| err.to_string())?;
 
     match response {
         ControlMessage::Accept => {
             // The receiver now downloads. Wait for its Result.
-            let final_msg = recv_message_timeout(
-                &mut recv,
-                HANDSHAKE_TIMEOUT,
-                "receiver result or cancel",
-            )
-            .await
-            .map_err(|err| err.to_string())?;
+            let final_msg =
+                recv_message_timeout(&mut recv, HANDSHAKE_TIMEOUT, "receiver result or cancel")
+                    .await
+                    .map_err(|err| err.to_string())?;
             match final_msg {
                 ControlMessage::Result { bytes, files } => {
                     if bytes != total || files != file_count {
@@ -293,8 +292,7 @@ async fn receive_flow_accept_downloads_all_files() {
 
     let (sender, control_rx) = sender_engine(&sender_dir).await;
 
-    let (sender_fut, pair) =
-        start_sender(sender, control_rx, &rv_url, vec![a, b, c]).await;
+    let (sender_fut, pair) = start_sender(sender, control_rx, &rv_url, vec![a, b, c]).await;
 
     let receiver_fut = run_receive(
         Some(pair.code),
@@ -356,8 +354,7 @@ async fn receive_flow_decline_reached_sender() {
 
     let (sender, control_rx) = sender_engine(&sender_dir).await;
 
-    let (sender_fut, pair) =
-        start_sender(sender, control_rx, &rv_url, vec![a, b, c]).await;
+    let (sender_fut, pair) = start_sender(sender, control_rx, &rv_url, vec![a, b, c]).await;
 
     // Auto-decline to test the decline path.
     let receiver_fut = run_receive(
@@ -399,8 +396,7 @@ async fn receive_flow_wrong_words_fails_cleanly() {
 
     let (sender, control_rx) = sender_engine(&sender_dir).await;
 
-    let (sender_fut, pair) =
-        start_sender(sender, control_rx, &rv_url, vec![a, b, c]).await;
+    let (sender_fut, pair) = start_sender(sender, control_rx, &rv_url, vec![a, b, c]).await;
 
     // Build a wrong-words code: same nameplate, different words.
     let (nameplate, _words) = WordCode::split(&pair.code).expect("split code");

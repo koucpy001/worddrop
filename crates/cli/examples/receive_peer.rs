@@ -59,19 +59,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let data_dir = std::env::temp_dir().join(format!("receive-peer-{}", std::process::id()));
     let relay_url: iroh::RelayUrl = relay_url.parse()?;
-    let engine = TransferEngine::with_relay_mode(
-        &data_dir,
-        RelayMode::Custom(relay_url.into()),
-        None,
-    )
-    .await?;
+    let engine =
+        TransferEngine::with_relay_mode(&data_dir, RelayMode::Custom(relay_url.into()), None)
+            .await?;
     timeout(Duration::from_secs(15), engine.endpoint().online()).await?;
 
-    let conn = timeout(PAIR_TIMEOUT, engine.endpoint().connect(ticket.addr().clone(), CONTROL_ALPN))
-        .await??;
+    let conn = timeout(
+        PAIR_TIMEOUT,
+        engine
+            .endpoint()
+            .connect(ticket.addr().clone(), CONTROL_ALPN),
+    )
+    .await??;
     let (mut send, mut recv) = conn.open_bi().await?;
 
-    send_message(&mut send, &ControlMessage::Hello { version: PROTOCOL_VERSION }).await?;
+    send_message(
+        &mut send,
+        &ControlMessage::Hello {
+            version: PROTOCOL_VERSION,
+        },
+    )
+    .await?;
     let _hello = recv_message_timeout(&mut recv, HANDSHAKE_TIMEOUT, "hello").await?;
     let _key = wire::spake_receiver_side(&mut send, &mut recv, words.as_bytes()).await?;
     println!("paired!");
@@ -80,11 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ControlMessage::Offer { files, total_bytes } = &offer else {
         return Err(format!("expected offer, got {offer:?}").into());
     };
-    println!(
-        "offer: {} files, {} bytes",
-        files.len(),
-        total_bytes
-    );
+    println!("offer: {} files, {} bytes", files.len(), total_bytes);
     for file in files {
         println!("  {} ({} bytes)", file.name, file.size);
     }
@@ -94,7 +98,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         FLOW_TIMEOUT,
         engine.receive(
             &ticket,
-            ReceiveOptions { target_dir: args.output.clone(), overwrite: false },
+            ReceiveOptions {
+                target_dir: args.output.clone(),
+                overwrite: false,
+            },
             &mut |_| {},
         ),
     )
@@ -108,7 +115,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     send_message(
         &mut send,
-        &ControlMessage::Result { bytes: result.bytes, files: result.files as u32 },
+        &ControlMessage::Result {
+            bytes: result.bytes,
+            files: result.files as u32,
+        },
     )
     .await?;
     wire::await_peer_close(&mut recv, "sender close after result").await?;

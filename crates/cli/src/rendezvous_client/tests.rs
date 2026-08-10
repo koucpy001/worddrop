@@ -19,10 +19,10 @@ struct Response {
 /// Spawn a mock server that answers every connection with the next scripted
 /// response and records the raw request text. Returns the base URL and a
 /// handle (cancelled when the test runtime drops).
-async fn mock_server(
-    script: Vec<Response>,
-) -> (String, JoinHandle<()>, Arc<Mutex<Vec<String>>>) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind mock port");
+async fn mock_server(script: Vec<Response>) -> (String, JoinHandle<()>, Arc<Mutex<Vec<String>>>) {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock port");
     let addr = listener.local_addr().expect("local addr");
     let url = format!("http://{addr}");
     let requests: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
@@ -33,7 +33,9 @@ async fn mock_server(
             let Ok((mut stream, _)) = listener.accept().await else {
                 return;
             };
-            let Some(response) = script.next() else { return };
+            let Some(response) = script.next() else {
+                return;
+            };
             let captured = captured.clone();
             tokio::spawn(async move {
                 let mut raw = Vec::new();
@@ -49,7 +51,10 @@ async fn mock_server(
                         }
                     }
                 }
-                captured.lock().expect("capture lock").push(String::from_utf8_lossy(&raw).into_owned());
+                captured
+                    .lock()
+                    .expect("capture lock")
+                    .push(String::from_utf8_lossy(&raw).into_owned());
                 let response = format!(
                     "HTTP/1.1 {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                     response.status,
@@ -76,10 +81,16 @@ async fn allocate_parses_nameplate_and_expiry() {
     .await;
     let client = RvClient::new(&url);
 
-    let allocation = client.allocate("ticket-abc").await.expect("allocate succeeds");
+    let allocation = client
+        .allocate("ticket-abc")
+        .await
+        .expect("allocate succeeds");
     assert_eq!(
         allocation,
-        Allocation { nameplate: 42, expires_at: 1780000000 }
+        Allocation {
+            nameplate: 42,
+            expires_at: 1780000000
+        }
     );
 }
 
@@ -92,10 +103,24 @@ async fn allocate_places_ticket_in_request_body() {
     .await;
     let client = RvClient::new(&url);
 
-    client.allocate("ticket-abc").await.expect("allocate succeeds");
-    let raw = captured.lock().expect("lock").first().expect("one request").clone();
-    assert!(raw.starts_with("POST /v1/pairs HTTP/1.1"), "method + path: {raw}");
-    assert!(raw.contains(r#""ticket":"ticket-abc""#), "ticket in body: {raw}");
+    client
+        .allocate("ticket-abc")
+        .await
+        .expect("allocate succeeds");
+    let raw = captured
+        .lock()
+        .expect("lock")
+        .first()
+        .expect("one request")
+        .clone();
+    assert!(
+        raw.starts_with("POST /v1/pairs HTTP/1.1"),
+        "method + path: {raw}"
+    );
+    assert!(
+        raw.contains(r#""ticket":"ticket-abc""#),
+        "ticket in body: {raw}"
+    );
 }
 
 #[tokio::test]
@@ -113,20 +138,29 @@ async fn claim_parses_ticket() {
 
 #[tokio::test]
 async fn claim_second_claim_maps_to_http_404() {
-    let (url, _task, _captured) = mock_server(vec![json_response("404 Not Found", r#"{"error":"pair not found"}"#)])
-        .await;
+    let (url, _task, _captured) = mock_server(vec![json_response(
+        "404 Not Found",
+        r#"{"error":"pair not found"}"#,
+    )])
+    .await;
     let client = RvClient::new(&url);
 
     let err = client.claim(7).await.expect_err("claimed pair is 404");
     let message = err.to_string();
     assert!(message.contains("HTTP 404"), "status surfaced: {message}");
-    assert!(message.contains("pair not found"), "server body surfaced: {message}");
+    assert!(
+        message.contains("pair not found"),
+        "server body surfaced: {message}"
+    );
 }
 
 #[tokio::test]
 async fn claim_expired_maps_to_http_410() {
-    let (url, _task, _captured) = mock_server(vec![json_response("410 Gone", r#"{"error":"pair has expired"}"#)])
-        .await;
+    let (url, _task, _captured) = mock_server(vec![json_response(
+        "410 Gone",
+        r#"{"error":"pair has expired"}"#,
+    )])
+    .await;
     let client = RvClient::new(&url);
 
     let err = client.claim(7).await.expect_err("expired pair is 410");
@@ -155,7 +189,13 @@ async fn status_unknown_state_is_parse_error() {
     let client = RvClient::new(&url);
 
     let err = client.status(7).await.expect_err("unknown state rejected");
-    assert!(matches!(err, super::RvError::Parse { kind: "status state", .. }));
+    assert!(matches!(
+        err,
+        super::RvError::Parse {
+            kind: "status state",
+            ..
+        }
+    ));
 }
 
 #[tokio::test]
@@ -177,7 +217,10 @@ async fn connection_refused_is_io_error() {
     drop(listener);
     let client = RvClient::new(&format!("http://{addr}"));
 
-    let err = client.health().await.expect_err("dead server surfaces io error");
+    let err = client
+        .health()
+        .await
+        .expect_err("dead server surfaces io error");
     assert!(matches!(err, super::RvError::Io(_)));
 }
 
@@ -190,6 +233,15 @@ async fn malformed_response_is_parse_error() {
     .await;
     let client = RvClient::new(&url);
 
-    let err = client.allocate("x").await.expect_err("garbage body rejected");
-    assert!(matches!(err, super::RvError::Parse { kind: "allocate", .. }));
+    let err = client
+        .allocate("x")
+        .await
+        .expect_err("garbage body rejected");
+    assert!(matches!(
+        err,
+        super::RvError::Parse {
+            kind: "allocate",
+            ..
+        }
+    ));
 }

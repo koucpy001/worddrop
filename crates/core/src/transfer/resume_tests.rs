@@ -72,7 +72,10 @@ fn make_source_tree(root: &Path) -> PathBuf {
     input
 }
 
-async fn prepare(engine: &TransferEngine, input: &PathBuf) -> crate::transfer::send::PreparedTransfer {
+async fn prepare(
+    engine: &TransferEngine,
+    input: &PathBuf,
+) -> crate::transfer::send::PreparedTransfer {
     engine
         .prepare_send(std::slice::from_ref(input), &mut |_| {})
         .await
@@ -98,7 +101,10 @@ async fn abort_receive_mid_download(
     let mut noop: Box<dyn FnMut(ReceiveProgress)> = Box::new(|_| {});
     let recv = receiver.receive_resumable(
         ticket,
-        ReceiveOptions { target_dir: target.to_path_buf(), overwrite: false },
+        ReceiveOptions {
+            target_dir: target.to_path_buf(),
+            overwrite: false,
+        },
         &mut noop,
     );
     tokio::pin!(recv);
@@ -126,7 +132,10 @@ async fn abort_receive_mid_download(
     }
     // `recv` is dropped at scope exit, mid-download: the connection drops and
     // the partial data stays in the store.
-    records.load(&hash, target).await.expect("record at abort point")
+    records
+        .load(&hash, target)
+        .await
+        .expect("record at abort point")
 }
 
 #[tokio::test]
@@ -160,13 +169,20 @@ async fn resume_interrupted_receive_completes_on_new_engine_same_data_dir() {
 
     // The record persisted the interruption point, and the FsStore bitfield
     // holds a partial blob (survived the store reload — the resume premise).
-    assert_eq!(record.status, TransferStatus::InProgress, "record marks the run as unfinished");
+    assert_eq!(
+        record.status,
+        TransferStatus::InProgress,
+        "record marks the run as unfinished"
+    );
     assert!(
         record.bytes_received >= total / 2 && record.bytes_received < total,
         "record's bytes_received is mid-way: {} of {total}",
         record.bytes_received
     );
-    assert!(record.exported_files.is_empty(), "no exports happened before the abort");
+    assert!(
+        record.exported_files.is_empty(),
+        "no exports happened before the abort"
+    );
 
     // --- Run 2: a NEW engine on the SAME data dir resumes. ---
     let receiver2 = make_engine(&receiver_data).await;
@@ -176,7 +192,10 @@ async fn resume_interrupted_receive_completes_on_new_engine_same_data_dir() {
         .local(prepared.ticket.hash_and_format())
         .await
         .expect("store state");
-    assert!(!partial.is_complete(), "resume run starts from a partial blob");
+    assert!(
+        !partial.is_complete(),
+        "resume run starts from a partial blob"
+    );
     assert!(
         partial.local_bytes() >= total / 2 && partial.local_bytes() < total,
         "store bitfield survived the restart with {} of {total} bytes",
@@ -187,7 +206,10 @@ async fn resume_interrupted_receive_completes_on_new_engine_same_data_dir() {
     let result = receiver2
         .receive_resumable(
             &prepared.ticket,
-            ReceiveOptions { target_dir: target.clone(), overwrite: false },
+            ReceiveOptions {
+                target_dir: target.clone(),
+                overwrite: false,
+            },
             &mut |event| events.push(event),
         )
         .await
@@ -195,9 +217,16 @@ async fn resume_interrupted_receive_completes_on_new_engine_same_data_dir() {
 
     assert_eq!(result.bytes, total, "all payload bytes exported");
     assert_eq!(result.files, 1, "the single file exported");
-    assert!(result.skipped.is_empty(), "nothing skipped on a fresh target");
+    assert!(
+        result.skipped.is_empty(),
+        "nothing skipped on a fresh target"
+    );
     let got = fs::read(target.join("big.bin")).expect("exported file");
-    assert_eq!(got, fs::read(&input).expect("source"), "resumed export is byte-for-byte");
+    assert_eq!(
+        got,
+        fs::read(&input).expect("source"),
+        "resumed export is byte-for-byte"
+    );
 
     // The record provides the UI offset: progress resumes from where the
     // record stopped, never from zero, and still reaches the total.
@@ -208,7 +237,10 @@ async fn resume_interrupted_receive_completes_on_new_engine_same_data_dir() {
             _ => None,
         })
         .collect();
-    assert!(!resumed.is_empty(), "resumed run must download the missing chunks");
+    assert!(
+        !resumed.is_empty(),
+        "resumed run must download the missing chunks"
+    );
     assert_eq!(resumed.last(), Some(&total), "progress reaches the total");
     assert!(
         resumed[0] >= record.bytes_received,
@@ -258,22 +290,32 @@ async fn resume_corrupt_record_is_treated_as_fresh_receive() {
     // A corrupt record file (a crashed partial write, or a tampered disk)
     // must not break a receive: it is treated as "no record", the download
     // runs to completion, and the record is replaced and finally deleted.
-    tokio::fs::create_dir_all(records.dir()).await.expect("records dir");
-    tokio::fs::write(records.path(&hash), b"{ this is not JSON !!!").await.expect("corrupt file");
+    tokio::fs::create_dir_all(records.dir())
+        .await
+        .expect("records dir");
+    tokio::fs::write(records.path(&hash), b"{ this is not JSON !!!")
+        .await
+        .expect("corrupt file");
 
     let receiver = make_engine(&receiver_data).await;
     let mut events: Vec<ReceiveProgress> = Vec::new();
     let result = receiver
         .receive_resumable(
             &prepared.ticket,
-            ReceiveOptions { target_dir: target.clone(), overwrite: false },
+            ReceiveOptions {
+                target_dir: target.clone(),
+                overwrite: false,
+            },
             &mut |event| events.push(event),
         )
         .await
         .expect("receive with a corrupt record still succeeds");
     assert_eq!(result.bytes, prepared.total_bytes, "full download + export");
     assert_eq!(result.files, 1);
-    assert_eq!(fs::read(target.join("big.bin")).expect("exported"), fs::read(&input).expect("source"));
+    assert_eq!(
+        fs::read(target.join("big.bin")).expect("exported"),
+        fs::read(&input).expect("source")
+    );
     assert!(
         events
             .iter()
@@ -312,12 +354,18 @@ async fn resume_skips_files_the_record_marks_as_exported() {
     receiver
         .receive_resumable(
             &prepared.ticket,
-            ReceiveOptions { target_dir: target.clone(), overwrite: false },
+            ReceiveOptions {
+                target_dir: target.clone(),
+                overwrite: false,
+            },
             &mut |_| {},
         )
         .await
         .expect("first receive");
-    assert!(records.load(&hash, &target).await.is_none(), "record deleted after run 1");
+    assert!(
+        records.load(&hash, &target).await.is_none(),
+        "record deleted after run 1"
+    );
 
     // Simulate a crash after one export: the record claims a.txt was already
     // exported (data complete), and the exported file is then missing (the
@@ -326,7 +374,10 @@ async fn resume_skips_files_the_record_marks_as_exported() {
     let mut record = TransferRecord::new(hash, &target);
     record.bytes_received = prepared.total_bytes;
     record.exported_files.push("input/a.txt".to_string());
-    records.save(&record).await.expect("persist crash-state record");
+    records
+        .save(&record)
+        .await
+        .expect("persist crash-state record");
 
     // Run 2: the record skips re-exporting a.txt (record says done, so it is
     // NOT restored even though the target is gone); the other files still
@@ -336,7 +387,10 @@ async fn resume_skips_files_the_record_marks_as_exported() {
     let result = receiver
         .receive_resumable(
             &prepared.ticket,
-            ReceiveOptions { target_dir: target.clone(), overwrite: false },
+            ReceiveOptions {
+                target_dir: target.clone(),
+                overwrite: false,
+            },
             &mut |event| events.push(event),
         )
         .await
@@ -359,7 +413,10 @@ async fn resume_skips_files_the_record_marks_as_exported() {
                 && !matches!(event, ReceiveProgress::Downloading { .. })),
         "data already complete: the resumed run does not dial or download"
     );
-    assert!(records.load(&hash, &target).await.is_none(), "record deleted after success");
+    assert!(
+        records.load(&hash, &target).await.is_none(),
+        "record deleted after success"
+    );
 
     sender.shutdown().await.expect("sender shutdown");
     receiver.shutdown().await.expect("receiver shutdown");

@@ -37,9 +37,7 @@ impl Nameplate {
         if raw.len() > 1 && raw.starts_with('0') {
             return Err(NameplateError::LeadingZero);
         }
-        let value: u32 = raw
-            .parse()
-            .map_err(|_| NameplateError::NotNumeric)?;
+        let value: u32 = raw.parse().map_err(|_| NameplateError::NotNumeric)?;
         if !(NAMEPLATE_MIN..=NAMEPLATE_MAX).contains(&value) {
             return Err(NameplateError::OutOfRange);
         }
@@ -144,7 +142,10 @@ impl Mailbox {
     /// One-shot claim: return the ticket and mark the entry claimed. A second
     /// claim on the same nameplate returns [`ClaimError::NotFound`].
     pub fn claim(&mut self, nameplate: Nameplate, now: Instant) -> Result<String, ClaimError> {
-        let entry = self.entries.get_mut(&nameplate).ok_or(ClaimError::NotFound)?;
+        let entry = self
+            .entries
+            .get_mut(&nameplate)
+            .ok_or(ClaimError::NotFound)?;
         if now >= entry.expires_at {
             return Err(ClaimError::Expired);
         }
@@ -221,7 +222,16 @@ mod tests {
     #[test]
     fn nameplate_parse_rejects_words_and_non_numeric() {
         // SECURITY F1: the word password and its "-" separator must never pass.
-        for raw in ["", "abc", "7-correct-horse-battery", "1a", "12b3", "+5", "-7", "1_000"] {
+        for raw in [
+            "",
+            "abc",
+            "7-correct-horse-battery",
+            "1a",
+            "12b3",
+            "+5",
+            "-7",
+            "1_000",
+        ] {
             assert!(
                 Nameplate::parse(raw).is_err(),
                 "expected rejection for {raw:?}"

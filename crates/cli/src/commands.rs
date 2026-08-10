@@ -1,5 +1,6 @@
-//! Subcommand dispatch. `send` runs the full T13 flow; `config` is fully
-//! functional (T12); `receive` is an argument-reporting stub until T14.
+//! Subcommand dispatch. `send` runs the full send flow, `receive` runs the
+//! full receive flow, and `config` is fully functional — all three are
+//! implemented end to end (pairing, transfer, progress UI, resume).
 
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -64,7 +65,9 @@ fn role_data_dir(base: &Path, role: Role) -> PathBuf {
 /// SPAKE2 (words only), transfer with a progress bar, cancel on Ctrl+C.
 fn send(args: SendArgs) -> Result<String, CliError> {
     let runtime = tokio::runtime::Runtime::new().map_err(|source| {
-        CliError::runtime(format!("无法启动异步运行时 / failed to start async runtime: {source}"))
+        CliError::runtime(format!(
+            "无法启动异步运行时 / failed to start async runtime: {source}"
+        ))
     })?;
     runtime.block_on(send_async(args))
 }
@@ -94,7 +97,9 @@ async fn send_async(args: SendArgs) -> Result<String, CliError> {
     })
     .await
     .map_err(|source| {
-        CliError::runtime(format!("无法启动传输引擎 / failed to start transfer engine: {source}"))
+        CliError::runtime(format!(
+            "无法启动传输引擎 / failed to start transfer engine: {source}"
+        ))
     })?;
 
     // The ticket must carry the relay URL: wait for relay contact before
@@ -157,7 +162,9 @@ async fn send_async(args: SendArgs) -> Result<String, CliError> {
 /// default no after 60s), on accept → download + export with progress.
 fn receive(args: ReceiveArgs) -> Result<String, CliError> {
     let runtime = tokio::runtime::Runtime::new().map_err(|source| {
-        CliError::runtime(format!("无法启动异步运行时 / failed to start async runtime: {source}"))
+        CliError::runtime(format!(
+            "无法启动异步运行时 / failed to start async runtime: {source}"
+        ))
     })?;
     runtime.block_on(receive_async(args))
 }

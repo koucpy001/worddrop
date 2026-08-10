@@ -8,8 +8,8 @@
 
 use core::fmt;
 
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 /// Upper bound for a single frame's JSON payload (16 MiB, drift parity).
 pub const MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
@@ -120,7 +120,7 @@ impl<T: DeserializeOwned> WireMessage<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::wire::{WireError, WireMessage, MAX_FRAME_BYTES};
+    use super::super::wire::{MAX_FRAME_BYTES, WireError, WireMessage};
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, PartialEq, Serialize, Deserialize)]

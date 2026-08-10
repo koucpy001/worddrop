@@ -49,7 +49,11 @@ impl WordCode {
         }
         Ok(Self {
             nameplate,
-            words: [picked[0].to_string(), picked[1].to_string(), picked[2].to_string()],
+            words: [
+                picked[0].to_string(),
+                picked[1].to_string(),
+                picked[2].to_string(),
+            ],
         })
     }
 
@@ -151,10 +155,14 @@ pub enum WordCodeError {
 impl fmt::Display for WordCodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingHyphen => write!(f, "code must contain a '-' separating nameplate and words"),
+            Self::MissingHyphen => {
+                write!(f, "code must contain a '-' separating nameplate and words")
+            }
             Self::InvalidNameplate(n) => write!(f, "nameplate '{n}' must be a number in 1..=9999"),
             Self::EmptyWords => write!(f, "code must contain words after the nameplate"),
-            Self::WrongWordCount(n) => write!(f, "code must contain exactly {WORD_COUNT} words, got {n}"),
+            Self::WrongWordCount(n) => {
+                write!(f, "code must contain exactly {WORD_COUNT} words, got {n}")
+            }
             Self::UnknownWord(w) => write!(f, "word '{w}' is not in the PGP wordlist"),
             Self::DuplicateWord(w) => write!(f, "word '{w}' appears more than once in the code"),
         }
@@ -165,8 +173,8 @@ impl std::error::Error for WordCodeError {}
 
 #[cfg(test)]
 mod tests {
-    use rand::rngs::StdRng;
     use rand::SeedableRng;
+    use rand::rngs::StdRng;
 
     use super::*;
 
@@ -183,7 +191,11 @@ mod tests {
         assert_eq!(code.nameplate(), 7);
         assert_eq!(
             code.words(),
-            &["adroitness".to_string(), "adviser".to_string(), "aftermath".to_string()]
+            &[
+                "adroitness".to_string(),
+                "adviser".to_string(),
+                "aftermath".to_string()
+            ]
         );
         assert_eq!(code.to_string(), VALID);
         assert_eq!(code.password(), "adroitness-adviser-aftermath");
@@ -230,7 +242,10 @@ mod tests {
             "-adroitness-adviser-aftermath",
         ] {
             assert!(
-                matches!(WordCode::validate(bad), Err(WordCodeError::InvalidNameplate(_))),
+                matches!(
+                    WordCode::validate(bad),
+                    Err(WordCodeError::InvalidNameplate(_))
+                ),
                 "expected InvalidNameplate for {bad}"
             );
         }
@@ -267,7 +282,10 @@ mod tests {
     fn split_rejects_invalid_nameplate() {
         for bad in ["abc-x", "0-x", "-x"] {
             assert!(
-                matches!(WordCode::split(bad), Err(WordCodeError::InvalidNameplate(_))),
+                matches!(
+                    WordCode::split(bad),
+                    Err(WordCodeError::InvalidNameplate(_))
+                ),
                 "expected InvalidNameplate for {bad}"
             );
         }

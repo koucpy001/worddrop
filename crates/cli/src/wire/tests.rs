@@ -2,7 +2,7 @@
 //! the "mocked streams" unit layer of T13: the sender-side and receiver-side
 //! helpers are wired back to back with no iroh endpoint involved.
 
-use tokio::io::{duplex, AsyncWriteExt};
+use tokio::io::{AsyncWriteExt, duplex};
 
 use my_croc_core::pairing::spake::SpakeError;
 use my_croc_core::protocol::wire::WireMessage;
@@ -16,8 +16,14 @@ fn channel() -> (Duplex, Duplex) {
     let (a_send, b_recv) = duplex(4096);
     let (b_send, a_recv) = duplex(4096);
     (
-        Duplex { send: a_send, recv: a_recv },
-        Duplex { send: b_send, recv: b_recv },
+        Duplex {
+            send: a_send,
+            recv: a_recv,
+        },
+        Duplex {
+            send: b_send,
+            recv: b_recv,
+        },
     )
 }
 
@@ -44,9 +50,13 @@ async fn spake_roundtrip_with_same_words_derives_same_key() {
 async fn spake_roundtrip_with_different_words_fails_confirmation() {
     let (mut sender, mut receiver) = channel();
 
-    let sender_side = spake_sender_side(&mut sender.send, &mut sender.recv, b"correct-horse-battery");
-    let receiver_side =
-        spake_receiver_side(&mut receiver.send, &mut receiver.recv, b"wrong-horse-battery");
+    let sender_side =
+        spake_sender_side(&mut sender.send, &mut sender.recv, b"correct-horse-battery");
+    let receiver_side = spake_receiver_side(
+        &mut receiver.send,
+        &mut receiver.recv,
+        b"wrong-horse-battery",
+    );
 
     let (sender_result, receiver_result) = tokio::join!(sender_side, receiver_side);
     // Both sides surface ConfirmationMismatch symmetrically (T11 finding:
@@ -57,7 +67,10 @@ async fn spake_roundtrip_with_different_words_fails_confirmation() {
     );
     for result in [sender_result, receiver_result] {
         assert!(
-            matches!(result, Err(PairError::Spake(SpakeError::ConfirmationMismatch))),
+            matches!(
+                result,
+                Err(PairError::Spake(SpakeError::ConfirmationMismatch))
+            ),
             "mismatch must surface as ConfirmationMismatch"
         );
     }
@@ -68,10 +81,14 @@ async fn recv_hello_rejects_non_hello_message() {
     let (mut b_send, mut a_recv) = duplex(4096);
 
     // The peer sends a Cancel instead of a Hello.
-    let frame = WireMessage::new(&ControlMessage::Cancel).encode().expect("encode");
+    let frame = WireMessage::new(&ControlMessage::Cancel)
+        .encode()
+        .expect("encode");
     b_send.write_all(&frame).await.expect("write");
 
-    let err = recv_hello(&mut a_recv).await.expect_err("non-hello rejected");
+    let err = recv_hello(&mut a_recv)
+        .await
+        .expect_err("non-hello rejected");
     assert!(matches!(err, PairError::Not("hello")));
 }
 
@@ -93,7 +110,9 @@ async fn await_peer_close_returns_on_clean_eof() {
     let (b_send, mut a_recv) = duplex(4096);
     drop(b_send); // peer hangs up
 
-    super::await_peer_close(&mut a_recv, "peer close").await.expect("EOF is a clean close");
+    super::await_peer_close(&mut a_recv, "peer close")
+        .await
+        .expect("EOF is a clean close");
 }
 
 #[tokio::test]

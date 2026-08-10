@@ -13,13 +13,13 @@ use std::{
 };
 
 use iroh_blobs::{
+    BlobFormat, Hash,
     api::{
-        blobs::{AddPathOptions, AddProgressItem, ImportMode},
         TempTag,
+        blobs::{AddPathOptions, AddProgressItem, ImportMode},
     },
     format::collection::Collection,
     ticket::BlobTicket,
-    BlobFormat, Hash,
 };
 use n0_future::StreamExt;
 use tracing::warn;
@@ -72,9 +72,15 @@ pub enum SendError {
     /// The input path does not exist.
     MissingSource { path: PathBuf },
     /// Failed to read metadata for a path.
-    ReadMetadata { path: PathBuf, source: std::io::Error },
+    ReadMetadata {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     /// Failed to list a directory.
-    ReadDirectory { path: PathBuf, source: std::io::Error },
+    ReadDirectory {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     /// A path component is not valid UTF-8.
     InvalidUtf8PathComponent { path: PathBuf },
     /// The input path has no name component to derive collection names from.
@@ -84,11 +90,16 @@ pub enum SendError {
     /// Two inputs would produce the same collection name.
     DuplicateName { name: String },
     /// The store failed to import a file.
-    Import { name: String, source: std::io::Error },
+    Import {
+        name: String,
+        source: std::io::Error,
+    },
     /// The import stream ended without a `Done` event.
     ImportStreamEnded { name: String },
     /// The collection could not be stored.
-    StoreCollection { source: Box<dyn std::error::Error + Send + Sync> },
+    StoreCollection {
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
 }
 
 impl fmt::Display for SendError {
@@ -98,7 +109,11 @@ impl fmt::Display for SendError {
                 write!(f, "source path {} does not exist", path.display())
             }
             SendError::ReadMetadata { path, source } => {
-                write!(f, "failed to read metadata for {}: {source}", path.display())
+                write!(
+                    f,
+                    "failed to read metadata for {}: {source}",
+                    path.display()
+                )
             }
             SendError::ReadDirectory { path, source } => {
                 write!(f, "failed to read directory {}: {source}", path.display())
@@ -151,9 +166,14 @@ impl std::error::Error for SendError {
 pub(crate) fn walk_files(path: &Path) -> Result<Vec<(String, PathBuf)>, SendError> {
     let metadata = std::fs::symlink_metadata(path).map_err(|source| {
         if source.kind() == std::io::ErrorKind::NotFound {
-            SendError::MissingSource { path: path.to_path_buf() }
+            SendError::MissingSource {
+                path: path.to_path_buf(),
+            }
         } else {
-            SendError::ReadMetadata { path: path.to_path_buf(), source }
+            SendError::ReadMetadata {
+                path: path.to_path_buf(),
+                source,
+            }
         }
     })?;
     let file_type = metadata.file_type();
@@ -164,7 +184,9 @@ pub(crate) fn walk_files(path: &Path) -> Result<Vec<(String, PathBuf)>, SendErro
     let root_name = path
         .file_name()
         .and_then(|name| name.to_str())
-        .ok_or_else(|| SendError::InvalidRootName { path: path.to_path_buf() })?;
+        .ok_or_else(|| SendError::InvalidRootName {
+            path: path.to_path_buf(),
+        })?;
     let mut discovered = Vec::new();
     if file_type.is_file() {
         discovered.push((root_name.to_string(), path.to_path_buf()));
@@ -188,12 +210,15 @@ pub(crate) fn walk_files(path: &Path) -> Result<Vec<(String, PathBuf)>, SendErro
             if !current_type.is_dir() {
                 return Err(SendError::UnsupportedFileType { path: current });
             }
-            let entries = std::fs::read_dir(&current).map_err(|source| {
-                SendError::ReadDirectory { path: current.clone(), source }
-            })?;
+            let entries =
+                std::fs::read_dir(&current).map_err(|source| SendError::ReadDirectory {
+                    path: current.clone(),
+                    source,
+                })?;
             for entry in entries {
-                let entry = entry.map_err(|source| {
-                    SendError::ReadDirectory { path: current.clone(), source }
+                let entry = entry.map_err(|source| SendError::ReadDirectory {
+                    path: current.clone(),
+                    source,
                 })?;
                 let child = entry
                     .file_name()
@@ -203,7 +228,9 @@ pub(crate) fn walk_files(path: &Path) -> Result<Vec<(String, PathBuf)>, SendErro
             }
         }
     } else {
-        return Err(SendError::UnsupportedFileType { path: path.to_path_buf() });
+        return Err(SendError::UnsupportedFileType {
+            path: path.to_path_buf(),
+        });
     }
     discovered.sort_by(|(a, _), (b, _)| a.cmp(b));
     Ok(discovered)
@@ -288,13 +315,19 @@ impl TransferEngine {
         for file in &files {
             collection.push(file.name.clone(), file.hash);
         }
-        let collection_tag = collection
-            .store(self.store())
-            .await
-            .map_err(|source| SendError::StoreCollection { source: Box::new(source) })?;
+        let collection_tag =
+            collection
+                .store(self.store())
+                .await
+                .map_err(|source| SendError::StoreCollection {
+                    source: Box::new(source),
+                })?;
         drop(file_tags);
-        let ticket =
-            BlobTicket::new(self.endpoint().addr(), collection_tag.hash(), BlobFormat::HashSeq);
+        let ticket = BlobTicket::new(
+            self.endpoint().addr(),
+            collection_tag.hash(),
+            BlobFormat::HashSeq,
+        );
         Ok(PreparedTransfer {
             ticket,
             collection_hash: collection_tag.hash(),

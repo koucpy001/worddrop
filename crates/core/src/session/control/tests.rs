@@ -3,8 +3,8 @@ use std::time::Duration;
 use tokio::io::duplex;
 
 use super::{
-    ControlMessage, FileMeta, SessionError, PROTOCOL_VERSION, recv_message,
-    recv_message_timeout, send_message,
+    ControlMessage, FileMeta, PROTOCOL_VERSION, SessionError, recv_message, recv_message_timeout,
+    send_message,
 };
 use crate::protocol::wire::MAX_FRAME_BYTES;
 
@@ -25,7 +25,10 @@ fn offer() -> ControlMessage {
 
 #[test]
 fn session_control_hello_serializes_with_type_tag() {
-    let json = serde_json::to_string(&ControlMessage::Hello { version: PROTOCOL_VERSION }).unwrap();
+    let json = serde_json::to_string(&ControlMessage::Hello {
+        version: PROTOCOL_VERSION,
+    })
+    .unwrap();
     assert!(json.contains("\"type\":\"hello\""));
     assert!(json.contains("\"version\":1"));
 }
@@ -53,12 +56,19 @@ fn session_control_unit_variants_serialize_plain() {
 #[test]
 fn session_control_roundtrip_each_variant() {
     let messages = [
-        ControlMessage::Hello { version: PROTOCOL_VERSION },
+        ControlMessage::Hello {
+            version: PROTOCOL_VERSION,
+        },
         offer(),
         ControlMessage::Accept,
-        ControlMessage::Decline { reason: "busy".to_owned() },
+        ControlMessage::Decline {
+            reason: "busy".to_owned(),
+        },
         ControlMessage::Cancel,
-        ControlMessage::Result { bytes: 4096, files: 1 },
+        ControlMessage::Result {
+            bytes: 4096,
+            files: 1,
+        },
     ];
     for message in messages {
         let json = serde_json::to_vec(&message).unwrap();
@@ -70,18 +80,34 @@ fn session_control_roundtrip_each_variant() {
 #[test]
 fn session_control_check_version_rejects_wrong_hello_only() {
     assert!(matches!(
-        ControlMessage::Hello { version: PROTOCOL_VERSION + 1 }.check_version(),
-        Err(SessionError::VersionMismatch { got: 2, expected: 1 })
+        ControlMessage::Hello {
+            version: PROTOCOL_VERSION + 1
+        }
+        .check_version(),
+        Err(SessionError::VersionMismatch {
+            got: 2,
+            expected: 1
+        })
     ));
-    assert!(ControlMessage::Hello { version: PROTOCOL_VERSION }.check_version().is_ok());
+    assert!(
+        ControlMessage::Hello {
+            version: PROTOCOL_VERSION
+        }
+        .check_version()
+        .is_ok()
+    );
     assert!(offer().check_version().is_ok());
 }
 
 #[tokio::test]
 async fn session_control_send_recv_roundtrip_over_duplex() {
     let (mut tx, mut rx) = duplex(1024);
-    send_message(&mut tx, &offer()).await.expect("send succeeds");
-    send_message(&mut tx, &ControlMessage::Cancel).await.expect("send succeeds");
+    send_message(&mut tx, &offer())
+        .await
+        .expect("send succeeds");
+    send_message(&mut tx, &ControlMessage::Cancel)
+        .await
+        .expect("send succeeds");
     drop(tx);
 
     let first = recv_message(&mut rx).await.expect("first message decodes");
@@ -106,12 +132,16 @@ async fn session_control_recv_truncated_stream_is_unexpected_eof() {
 #[tokio::test]
 async fn session_control_recv_over_cap_length_is_frame_too_large() {
     let (mut tx, mut rx) = duplex(1024);
-    tx.write_all(&(MAX_FRAME_BYTES as u32 + 1).to_le_bytes()).await.unwrap();
+    tx.write_all(&(MAX_FRAME_BYTES as u32 + 1).to_le_bytes())
+        .await
+        .unwrap();
     drop(tx);
 
     assert!(matches!(
         recv_message(&mut rx).await,
-        Err(SessionError::Wire(crate::protocol::wire::WireError::FrameTooLarge { .. }))
+        Err(SessionError::Wire(
+            crate::protocol::wire::WireError::FrameTooLarge { .. }
+        ))
     ));
 }
 
@@ -124,16 +154,23 @@ async fn session_control_recv_garbage_json_is_deserialize_error() {
 
     assert!(matches!(
         recv_message(&mut rx).await,
-        Err(SessionError::Wire(crate::protocol::wire::WireError::Deserialize(_)))
+        Err(SessionError::Wire(
+            crate::protocol::wire::WireError::Deserialize(_)
+        ))
     ));
 }
 
 #[tokio::test]
 async fn session_control_recv_wrong_version_is_rejected() {
     let (mut tx, mut rx) = duplex(1024);
-    send_message(&mut tx, &ControlMessage::Hello { version: PROTOCOL_VERSION + 1 })
-        .await
-        .unwrap();
+    send_message(
+        &mut tx,
+        &ControlMessage::Hello {
+            version: PROTOCOL_VERSION + 1,
+        },
+    )
+    .await
+    .unwrap();
     drop(tx);
 
     assert!(matches!(

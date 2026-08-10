@@ -17,7 +17,7 @@ use tokio::sync::mpsc;
 
 use my_croc_core::pairing::handshake::HandshakeMessage;
 use my_croc_core::pairing::spake::{SessionKey, SpakeError, SpakeSession};
-use my_croc_core::protocol::wire::{WireError, WireMessage, MAX_FRAME_BYTES};
+use my_croc_core::protocol::wire::{MAX_FRAME_BYTES, WireError, WireMessage};
 use my_croc_core::session::control::{
     ControlMessage, HANDSHAKE_TIMEOUT, IDLE_TIMEOUT, PROTOCOL_VERSION, SessionError,
     recv_message_timeout,
@@ -51,7 +51,10 @@ impl ControlAcceptor {
 }
 
 impl ProtocolHandler for ControlAcceptor {
-    fn accept(&self, conn: Connection) -> impl std::future::Future<Output = Result<(), AcceptError>> + Send {
+    fn accept(
+        &self,
+        conn: Connection,
+    ) -> impl std::future::Future<Output = Result<(), AcceptError>> + Send {
         let tx = self.tx.clone();
         async move {
             let _ = tx.send(conn);
@@ -137,7 +140,9 @@ pub async fn send_handshake<W>(writer: &mut W, message: &HandshakeMessage) -> Re
 where
     W: AsyncWrite + Unpin,
 {
-    let frame = WireMessage::new(message).encode().map_err(PairError::Wire)?;
+    let frame = WireMessage::new(message)
+        .encode()
+        .map_err(PairError::Wire)?;
     writer.write_all(&frame).await?;
     writer.flush().await?;
     Ok(())
@@ -201,8 +206,9 @@ where
     let (session, message) = SpakeSession::start(words);
     send_handshake(send, &HandshakeMessage::spake(&message)?).await?;
     let key = session.finish(&inbound)?;
-    let inbound_token =
-        recv_handshake_timeout(recv, PAIR_TIMEOUT, "sender confirm token").await?.into_confirm()?;
+    let inbound_token = recv_handshake_timeout(recv, PAIR_TIMEOUT, "sender confirm token")
+        .await?
+        .into_confirm()?;
     send_handshake(send, &HandshakeMessage::confirm(key.confirm_token())).await?;
     key.verify_confirm(&inbound_token)?;
     Ok(key)
@@ -226,8 +232,9 @@ where
         .into_pake()?;
     let key = session.finish(&inbound)?;
     send_handshake(send, &HandshakeMessage::confirm(key.confirm_token())).await?;
-    let inbound_token =
-        recv_handshake_timeout(recv, PAIR_TIMEOUT, "receiver confirm token").await?.into_confirm()?;
+    let inbound_token = recv_handshake_timeout(recv, PAIR_TIMEOUT, "receiver confirm token")
+        .await?
+        .into_confirm()?;
     key.verify_confirm(&inbound_token)?;
     Ok(key)
 }
@@ -240,9 +247,9 @@ where
 {
     let message = recv_message_timeout(recv, HANDSHAKE_TIMEOUT, "sender hello").await?;
     match message {
-        ControlMessage::Hello { .. } => {
-            Ok(ControlMessage::Hello { version: PROTOCOL_VERSION })
-        }
+        ControlMessage::Hello { .. } => Ok(ControlMessage::Hello {
+            version: PROTOCOL_VERSION,
+        }),
         _other => Err(PairError::Not("hello")),
     }
 }
@@ -255,7 +262,9 @@ pub async fn recv_message_idle<R>(
 where
     R: AsyncRead + Unpin,
 {
-    recv_message_timeout(recv, IDLE_TIMEOUT, what).await.map_err(PairError::Control)
+    recv_message_timeout(recv, IDLE_TIMEOUT, what)
+        .await
+        .map_err(PairError::Control)
 }
 
 /// Wait for the peer to close the control connection after it has read our

@@ -10,7 +10,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-use crate::protocol::wire::{WireError, WireMessage, MAX_FRAME_BYTES};
+use crate::protocol::wire::{MAX_FRAME_BYTES, WireError, WireMessage};
 
 /// Protocol version carried in [`ControlMessage::Hello`].
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -38,7 +38,10 @@ pub enum ControlMessage {
     /// First message of the handshake; version gates protocol compat.
     Hello { version: u32 },
     /// Sender advertises the transfer it wants to start.
-    Offer { files: Vec<FileMeta>, total_bytes: u64 },
+    Offer {
+        files: Vec<FileMeta>,
+        total_bytes: u64,
+    },
     /// Receiver agrees to the offer.
     Accept,
     /// Receiver refuses the offer.
@@ -75,7 +78,10 @@ pub enum SessionError {
     /// Peer closed the connection mid-message (treated as remote cancel in T11).
     UnexpectedEof,
     /// No message arrived within `limit`.
-    Timeout { context: &'static str, limit: Duration },
+    Timeout {
+        context: &'static str,
+        limit: Duration,
+    },
     /// Peer's Hello carries a different protocol version.
     VersionMismatch { got: u32, expected: u32 },
 }
@@ -87,10 +93,17 @@ impl fmt::Display for SessionError {
             Self::Io(err) => write!(f, "io error: {err}"),
             Self::UnexpectedEof => write!(f, "connection closed by peer mid-message"),
             Self::Timeout { context, limit } => {
-                write!(f, "timed out after {}s waiting for {context}", limit.as_secs())
+                write!(
+                    f,
+                    "timed out after {}s waiting for {context}",
+                    limit.as_secs()
+                )
             }
             Self::VersionMismatch { got, expected } => {
-                write!(f, "protocol version mismatch: got {got}, expected {expected}")
+                write!(
+                    f,
+                    "protocol version mismatch: got {got}, expected {expected}"
+                )
             }
         }
     }
@@ -111,7 +124,9 @@ pub async fn send_message<W>(writer: &mut W, message: &ControlMessage) -> Result
 where
     W: AsyncWrite + Unpin,
 {
-    let frame = WireMessage::new(message).encode().map_err(SessionError::Wire)?;
+    let frame = WireMessage::new(message)
+        .encode()
+        .map_err(SessionError::Wire)?;
     writer.write_all(&frame).await.map_err(SessionError::Io)?;
     writer.flush().await.map_err(SessionError::Io)?;
     Ok(())

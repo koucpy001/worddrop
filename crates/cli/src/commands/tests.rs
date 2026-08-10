@@ -10,7 +10,7 @@ use my_croc_core::pairing::wordcode::WordCode;
 use crate::{
     cli::{Cli, Commands, ConfigArgs, ConfigCommands, GetArgs, SetArgs},
     commands,
-    config::{ConfigFile, ENV_LOCK, CONFIG_FILE},
+    config::{CONFIG_FILE, ConfigFile, ENV_LOCK},
     error::CliError,
     receive::RecvError,
 };
@@ -62,7 +62,10 @@ fn config_set_then_get_roundtrip() {
     let dir = temp_config_dir("set-get");
     with_config_dir(&dir, || {
         let set = commands::run(cli_with(set_cmd("relay_url", "http://relay.example:3340")));
-        assert_eq!(set.expect("set ok"), "relay_url = http://relay.example:3340\n");
+        assert_eq!(
+            set.expect("set ok"),
+            "relay_url = http://relay.example:3340\n"
+        );
 
         let file = ConfigFile::load().expect("file loads");
         assert_eq!(file.relay_url.as_deref(), Some("http://relay.example:3340"));
@@ -78,7 +81,8 @@ fn config_get_all_prints_effective_values() {
     with_config_dir(&dir, || {
         let mut file = ConfigFile::default();
         file.set("overwrite", "true").expect("set");
-        file.save_to(&ConfigFile::path().expect("config path")).expect("save");
+        file.save_to(&ConfigFile::path().expect("config path"))
+            .expect("save");
 
         let out = commands::run(cli_with(get_cmd(None))).expect("get");
         assert!(out.contains(&format!(
@@ -103,7 +107,8 @@ fn config_set_invalid_value_is_user_error() {
 fn config_set_unknown_key_is_user_error() {
     let dir = temp_config_dir("set-unknown");
     with_config_dir(&dir, || {
-        let err = commands::run(cli_with(set_cmd("bogus", "x"))).expect_err("unknown key must fail");
+        let err =
+            commands::run(cli_with(set_cmd("bogus", "x"))).expect_err("unknown key must fail");
         assert!(matches!(err, CliError::User(_)));
     });
 }
@@ -112,8 +117,8 @@ fn config_set_unknown_key_is_user_error() {
 fn config_get_unknown_key_is_user_error() {
     let dir = temp_config_dir("get-unknown");
     with_config_dir(&dir, || {
-        let err = commands::run(cli_with(get_cmd(Some("bogus"))))
-            .expect_err("unknown key must fail");
+        let err =
+            commands::run(cli_with(get_cmd(Some("bogus")))).expect_err("unknown key must fail");
         assert!(matches!(err, CliError::User(_)));
     });
 }
@@ -163,7 +168,9 @@ fn recv_error_user_vs_runtime_mapping() {
         "no-code should be user error, got {cli:?}"
     );
 
-    let user_err = RecvError::Pair(crate::wire::PairError::Spake(SpakeError::ConfirmationMismatch));
+    let user_err = RecvError::Pair(crate::wire::PairError::Spake(
+        SpakeError::ConfirmationMismatch,
+    ));
     let cli: CliError = user_err.into();
     assert!(
         matches!(cli, CliError::User(_)),
@@ -209,6 +216,9 @@ fn role_data_dirs_are_private_per_role() {
     let recv = commands::role_data_dir(&base, commands::Role::Receive);
     assert_eq!(send, base.join("send"));
     assert_eq!(recv, base.join("receive"));
-    assert_ne!(send, recv, "send and receive must not share an engine data dir");
+    assert_ne!(
+        send, recv,
+        "send and receive must not share an engine data dir"
+    );
     assert!(send.starts_with(&base) && recv.starts_with(&base));
 }

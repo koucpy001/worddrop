@@ -2323,6 +2323,7 @@ dependencies = [
  "spake2",
  "tokio",
  "tracing",
+ "zeroize",
 ]
 
 [[package]]

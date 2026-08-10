@@ -131,17 +131,19 @@ impl SpakeSession {
 }
 
 /// The 32-byte shared session key, plus the key-confirmation round.
-#[derive(Clone, PartialEq, Eq)]
+/// ZeroizeOnDrop wipes the key material when the value is dropped (same
+/// hygiene as iroh's `SecretKey`).
+#[derive(Clone, PartialEq, Eq, zeroize::ZeroizeOnDrop)]
 pub struct SessionKey([u8; SESSION_KEY_LEN]);
 
 impl SessionKey {
     fn from_raw(key: Vec<u8>) -> Result<Self, SpakeError> {
-        let bytes: [u8; SESSION_KEY_LEN] = key.try_into().map_err(|key: Vec<u8>| {
-            SpakeError::KeyLengthMismatch {
-                expected: SESSION_KEY_LEN,
-                actual: key.len(),
-            }
-        })?;
+        let bytes: [u8; SESSION_KEY_LEN] =
+            key.try_into()
+                .map_err(|key: Vec<u8>| SpakeError::KeyLengthMismatch {
+                    expected: SESSION_KEY_LEN,
+                    actual: key.len(),
+                })?;
         Ok(Self(bytes))
     }
 
@@ -192,13 +194,11 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::super::handshake::HandshakeMessage;
     use super::super::spake::{
-        CONFIRM_TOKEN_LEN, SPAKE_MSG_LEN, SpakeError, SpakeSession, SessionKey,
+        CONFIRM_TOKEN_LEN, SPAKE_MSG_LEN, SessionKey, SpakeError, SpakeSession,
     };
     use crate::protocol::wire::WireMessage;
 
@@ -209,7 +209,6 @@ mod tests {
         let key_b = b.finish(&msg_a).expect("b finishes the exchange");
         (key_a, key_b)
     }
-
 
     #[test]
     fn outbound_message_is_33_bytes() {

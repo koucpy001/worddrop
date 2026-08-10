@@ -2,13 +2,13 @@
 //! updates into a cumulative "payload bytes served" counter (T13 progress).
 
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
     Arc,
+    atomic::{AtomicU64, Ordering},
 };
 
 use iroh_blobs::provider::events::{
-    ConnectMode, EventMask, EventSender, ObserveMode, ProviderMessage, RequestMode,
-    RequestUpdate, ThrottleMode,
+    ConnectMode, EventMask, EventSender, ObserveMode, ProviderMessage, RequestMode, RequestUpdate,
+    ThrottleMode,
 };
 
 /// Build an [`EventSender`] that notifies us of every blob request the
@@ -52,8 +52,10 @@ pub(super) fn make_event_sender(served: Arc<AtomicU64>) -> EventSender {
                             last_offset = progress.end_offset;
                         }
                         RequestUpdate::Completed(completed) => {
-                            let delta =
-                                completed.stats.payload_bytes_sent.saturating_sub(last_offset);
+                            let delta = completed
+                                .stats
+                                .payload_bytes_sent
+                                .saturating_sub(last_offset);
                             served.fetch_add(delta, Ordering::Relaxed);
                         }
                         // Aborted requests stop at their last Progress; the

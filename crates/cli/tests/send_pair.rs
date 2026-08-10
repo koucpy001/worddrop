@@ -36,7 +36,8 @@ static DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn temp_dir(tag: &str) -> PathBuf {
     let n = DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("my-croc-cli-send-{tag}-{}-{n}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("my-croc-cli-send-{tag}-{}-{n}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).expect("create temp dir");
     dir
@@ -55,7 +56,9 @@ fn fixture_files(dir: &Path) -> (PathBuf, PathBuf, PathBuf) {
 /// Spawn the real axum rendezvous server on an ephemeral port and wait until
 /// `/health` answers (same pattern as the T11 e2e).
 async fn spawn_rendezvous() -> (String, JoinHandle<()>) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind ephemeral port");
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind ephemeral port");
     let addr = listener.local_addr().expect("local addr");
     drop(listener);
     let url = format!("http://{addr}");
@@ -68,7 +71,10 @@ async fn spawn_rendezvous() -> (String, JoinHandle<()>) {
         if client.health().await.is_ok() {
             break;
         }
-        assert!(std::time::Instant::now() < deadline, "rendezvous not healthy");
+        assert!(
+            std::time::Instant::now() < deadline,
+            "rendezvous not healthy"
+        );
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     (url, handle)
@@ -76,9 +82,15 @@ async fn spawn_rendezvous() -> (String, JoinHandle<()>) {
 
 /// A sender engine with the CONTROL_ALPN acceptor and served-bytes tracking,
 /// on loopback (no relay).
-async fn sender_engine(data_dir: &PathBuf) -> (TransferEngine, mpsc::UnboundedReceiver<iroh::endpoint::Connection>) {
+async fn sender_engine(
+    data_dir: &PathBuf,
+) -> (
+    TransferEngine,
+    mpsc::UnboundedReceiver<iroh::endpoint::Connection>,
+) {
     let (control_tx, control_rx) = mpsc::unbounded_channel();
-    let acceptor: Box<dyn iroh::protocol::DynProtocolHandler> = ControlAcceptor::new(control_tx).into();
+    let acceptor: Box<dyn iroh::protocol::DynProtocolHandler> =
+        ControlAcceptor::new(control_tx).into();
     let engine = TransferEngine::new_spec(EngineSpec {
         data_dir,
         relay_mode: RelayMode::Disabled,
@@ -106,17 +118,31 @@ async fn run_fake_peer(
 ) -> Result<(), String> {
     let (nameplate, words) = WordCode::split(code).map_err(|err| err.to_string())?;
     let ticket_str = rv.claim(nameplate).await.map_err(|err| err.to_string())?;
-    let ticket = BlobTicket::from_str(&ticket_str).map_err(|_| format!("invalid ticket {ticket_str:?}"))?;
+    let ticket =
+        BlobTicket::from_str(&ticket_str).map_err(|_| format!("invalid ticket {ticket_str:?}"))?;
 
-    let conn = timeout(PAIR_TIMEOUT, engine.endpoint().connect(ticket.addr().clone(), CONTROL_ALPN))
+    let conn = timeout(
+        PAIR_TIMEOUT,
+        engine
+            .endpoint()
+            .connect(ticket.addr().clone(), CONTROL_ALPN),
+    )
+    .await
+    .map_err(|_| "timed out dialing the sender".to_string())?
+    .map_err(|err| format!("dial failed: {err}"))?;
+    let (mut send, mut recv) = conn
+        .open_bi()
         .await
-        .map_err(|_| "timed out dialing the sender".to_string())?
-        .map_err(|err| format!("dial failed: {err}"))?;
-    let (mut send, mut recv) = conn.open_bi().await.map_err(|err| format!("open_bi failed: {err}"))?;
+        .map_err(|err| format!("open_bi failed: {err}"))?;
 
-    send_message(&mut send, &ControlMessage::Hello { version: PROTOCOL_VERSION })
-        .await
-        .map_err(|err| err.to_string())?;
+    send_message(
+        &mut send,
+        &ControlMessage::Hello {
+            version: PROTOCOL_VERSION,
+        },
+    )
+    .await
+    .map_err(|err| err.to_string())?;
     let _hello = recv_message_timeout(&mut recv, HANDSHAKE_TIMEOUT, "peer hello")
         .await
         .map_err(|err| err.to_string())?;
@@ -147,15 +173,25 @@ async fn run_fake_peer(
             let result = engine
                 .receive(
                     &ticket,
-                    ReceiveOptions { target_dir: output.clone(), overwrite: false },
+                    ReceiveOptions {
+                        target_dir: output.clone(),
+                        overwrite: false,
+                    },
                     &mut |_| {},
                 )
                 .await
                 .map_err(|err| err.to_string())?;
-            assert!(result.files == 3, "peer received 3 files, got {}", result.files);
+            assert!(
+                result.files == 3,
+                "peer received 3 files, got {}",
+                result.files
+            );
             send_message(
                 &mut send,
-                &ControlMessage::Result { bytes: result.bytes, files: result.files as u32 },
+                &ControlMessage::Result {
+                    bytes: result.bytes,
+                    files: result.files as u32,
+                },
             )
             .await
             .map_err(|err| err.to_string())?;
@@ -176,7 +212,9 @@ async fn start_sender_side(
     rv_url: &str,
     paths: Vec<PathBuf>,
 ) -> (
-    std::pin::Pin<Box<dyn std::future::Future<Output = Result<SendOutcome, my_croc_cli::send::SendError>>>>,
+    std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<SendOutcome, my_croc_cli::send::SendError>>>,
+    >,
     String,
 ) {
     let (code_tx, mut code_rx) = mpsc::channel(1);
@@ -207,8 +245,14 @@ async fn start_sender_side(
 }
 
 fn verify_exported(output: &Path) {
-    assert_eq!(fs::read(output.join("a.txt")).expect("a"), b"hello world from a\n");
-    assert_eq!(fs::read(output.join("b.bin")).expect("b"), b"binary\x00\xff\xee data");
+    assert_eq!(
+        fs::read(output.join("a.txt")).expect("a"),
+        b"hello world from a\n"
+    );
+    assert_eq!(
+        fs::read(output.join("b.bin")).expect("b"),
+        b"binary\x00\xff\xee data"
+    );
     assert_eq!(
         fs::read(output.join("c.dat")).expect("c"),
         b"third! with more bytes for testing"
@@ -228,23 +272,26 @@ async fn send_flow_decline_reaches_the_sender() {
         .await
         .expect("peer engine");
 
-    let (sender_fut, code) =
-        start_sender_side(sender, control_rx, &rv_url, vec![a, b, c]).await;
+    let (sender_fut, code) = start_sender_side(sender, control_rx, &rv_url, vec![a, b, c]).await;
     let peer_rv = RvClient::new(&rv_url);
     let peer_result = run_fake_peer(
         &peer,
         &peer_rv,
         &code,
-        PeerAction::Decline { reason: "not now".to_string() },
+        PeerAction::Decline {
+            reason: "not now".to_string(),
+        },
     );
-    let (outcome, peer_result) = tokio::join!(
-        timeout(Duration::from_secs(180), sender_fut),
-        peer_result
-    );
+    let (outcome, peer_result) =
+        tokio::join!(timeout(Duration::from_secs(180), sender_fut), peer_result);
 
     assert_eq!(
-        outcome.expect("flow completes within 180s").expect("sender flow succeeds"),
-        SendOutcome::Declined { reason: "not now".to_string() },
+        outcome
+            .expect("flow completes within 180s")
+            .expect("sender flow succeeds"),
+        SendOutcome::Declined {
+            reason: "not now".to_string()
+        },
         "sender sees the decline"
     );
     peer_result.expect("peer decline flow succeeds");
@@ -265,21 +312,23 @@ async fn send_flow_accept_transfers_files_byte_for_byte() {
         .await
         .expect("peer engine");
 
-    let (sender_fut, code) =
-        start_sender_side(sender, control_rx, &rv_url, vec![a, b, c]).await;
+    let (sender_fut, code) = start_sender_side(sender, control_rx, &rv_url, vec![a, b, c]).await;
     let peer_rv = RvClient::new(&rv_url);
     let peer_result = run_fake_peer(
         &peer,
         &peer_rv,
         &code,
-        PeerAction::Accept { output: output.clone() },
+        PeerAction::Accept {
+            output: output.clone(),
+        },
     );
-    let (outcome, peer_result) = tokio::join!(
-        timeout(Duration::from_secs(180), sender_fut),
-        peer_result
-    );
+    let (outcome, peer_result) =
+        tokio::join!(timeout(Duration::from_secs(180), sender_fut), peer_result);
 
-    match outcome.expect("flow completes within 180s").expect("sender flow succeeds") {
+    match outcome
+        .expect("flow completes within 180s")
+        .expect("sender flow succeeds")
+    {
         SendOutcome::Completed { bytes, files } => {
             assert!(bytes > 0, "sender reports positive bytes");
             assert_eq!(files, 3, "sender reports 3 files");
@@ -322,5 +371,9 @@ async fn send_flow_local_interrupt_cancels_cleanly() {
     .expect("flow completes within 180s")
     .expect("cancel is not an error");
 
-    assert_eq!(outcome, SendOutcome::Cancelled, "interrupt cancels the flow cleanly");
+    assert_eq!(
+        outcome,
+        SendOutcome::Cancelled,
+        "interrupt cancels the flow cleanly"
+    );
 }

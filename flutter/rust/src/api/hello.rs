@@ -1,8 +1,10 @@
-//! Placeholder bridge functions (T16 skeleton).
+//! Retained bridge smoke function (originally the T16 skeleton placeholder).
 //!
 //! `hello` proves the whole FRB chain end to end: Dart -> codegen -> cdylib
-//! -> sync wrapper -> tokio RUNTIME.block_on. T17 replaces these with the
-//! real session/transfer API surface.
+//! -> sync wrapper -> tokio RUNTIME.block_on. Intentionally kept as a smoke
+//! test for the native bridge — exercised by `test/bridge_smoke.dart`
+//! ("hello() answers through the native cdylib") — alongside the real
+//! session/transfer API surface.
 
 use crate::api::RUNTIME;
 

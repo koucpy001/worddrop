@@ -11,16 +11,24 @@ use super::core::CONNECT_TIMEOUT;
 #[derive(Debug)]
 pub enum ReceiveError {
     /// Failed to create the target dir.
-    TargetDir { path: PathBuf, source: std::io::Error },
+    TargetDir {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     /// Failed to resolve the target dir to an absolute path (the export API
     /// requires absolute targets).
-    TargetDirResolve { path: PathBuf, source: std::io::Error },
+    TargetDirResolve {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     /// Failed to read the local store state for the ticket hash.
     LocalState {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
     /// Failed to connect to the sender endpoint from the ticket address.
-    Connect { source: iroh::endpoint::ConnectError },
+    Connect {
+        source: iroh::endpoint::ConnectError,
+    },
     /// The dial to the sender exceeded [`CONNECT_TIMEOUT`].
     ConnectTimeout,
     /// Failed to fetch the collection sizes from the peer.
@@ -28,29 +36,48 @@ pub enum ReceiveError {
     /// The download failed after connecting.
     Download { source: GetError },
     /// The downloaded collection could not be loaded from the store.
-    LoadCollection { source: Box<dyn std::error::Error + Send + Sync> },
+    LoadCollection {
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
     /// A collection name cannot be mapped safely to a path under the target
     /// dir (empty / `.` / `..` / backslash components).
     InvalidCollectionName { name: String },
     /// Export of a file failed.
-    Export { file: String, source: iroh_blobs::api::Error },
+    Export {
+        file: String,
+        source: iroh_blobs::api::Error,
+    },
     /// The export stream ended without a result.
     ExportStreamEnded { file: String },
     /// An existing target could not be removed for overwrite.
-    RemoveExisting { path: PathBuf, source: std::io::Error },
+    RemoveExisting {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     /// A transfer record could not be persisted (the resume convenience
     /// state; the transfer itself is unaffected).
-    RecordSave { path: PathBuf, source: std::io::Error },
+    RecordSave {
+        path: PathBuf,
+        source: std::io::Error,
+    },
 }
 
 impl fmt::Display for ReceiveError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ReceiveError::TargetDir { path, source } => {
-                write!(f, "failed to create target dir {}: {source}", path.display())
+                write!(
+                    f,
+                    "failed to create target dir {}: {source}",
+                    path.display()
+                )
             }
             ReceiveError::TargetDirResolve { path, source } => {
-                write!(f, "failed to resolve target dir {}: {source}", path.display())
+                write!(
+                    f,
+                    "failed to resolve target dir {}: {source}",
+                    path.display()
+                )
             }
             ReceiveError::LocalState { source } => {
                 write!(f, "failed to read local store state: {source}")
@@ -59,9 +86,15 @@ impl fmt::Display for ReceiveError {
                 write!(f, "failed to connect to the sender: {source}")
             }
             ReceiveError::ConnectTimeout => {
-                write!(f, "connect to the sender timed out after {:?}", CONNECT_TIMEOUT)
+                write!(
+                    f,
+                    "connect to the sender timed out after {:?}",
+                    CONNECT_TIMEOUT
+                )
             }
-            ReceiveError::Sizes { source } => write!(f, "failed to fetch collection sizes: {source}"),
+            ReceiveError::Sizes { source } => {
+                write!(f, "failed to fetch collection sizes: {source}")
+            }
             ReceiveError::Download { source } => write!(f, "download failed: {source}"),
             ReceiveError::LoadCollection { source } => {
                 write!(f, "failed to load downloaded collection: {source}")
@@ -77,10 +110,18 @@ impl fmt::Display for ReceiveError {
                 write!(f, "export of {file:?} ended without a result")
             }
             ReceiveError::RemoveExisting { path, source } => {
-                write!(f, "failed to remove existing target {}: {source}", path.display())
+                write!(
+                    f,
+                    "failed to remove existing target {}: {source}",
+                    path.display()
+                )
             }
             ReceiveError::RecordSave { path, source } => {
-                write!(f, "failed to save transfer record {}: {source}", path.display())
+                write!(
+                    f,
+                    "failed to save transfer record {}: {source}",
+                    path.display()
+                )
             }
         }
     }

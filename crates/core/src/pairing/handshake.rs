@@ -92,13 +92,13 @@ fn hex_decode(hex: &str) -> Result<Vec<u8>, SpakeError> {
 
 fn hex_decode_array<const N: usize>(hex: &str, kind: &'static str) -> Result<[u8; N], SpakeError> {
     let bytes = hex_decode(hex)?;
-    bytes.try_into().map_err(|bytes: Vec<u8>| {
-        SpakeError::BadHandshakeLength {
+    bytes
+        .try_into()
+        .map_err(|bytes: Vec<u8>| SpakeError::BadHandshakeLength {
             kind,
             expected: N,
             actual: bytes.len(),
-        }
-    })
+        })
 }
 
 #[cfg(test)]

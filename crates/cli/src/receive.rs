@@ -32,7 +32,7 @@ use my_croc_core::transfer::receive::{ReceiveError, ReceiveOptions, ReceiveProgr
 use my_croc_core::transfer::record::RecordStore;
 
 use crate::rendezvous_client::{RvClient, RvError};
-use crate::ui::{bar_style, human_bytes, spinner_style, PlainBar, UiBar};
+use crate::ui::{PlainBar, UiBar, bar_style, human_bytes, spinner_style};
 use crate::wire::{self, CONTROL_ALPN, PAIR_TIMEOUT};
 
 /// How long to wait for the user offer prompt.
@@ -200,7 +200,14 @@ where
     I: Future<Output = ()> + Unpin,
 {
     let mut interrupt = interrupt;
-    let ReceiveOpts { output, data_dir, rendezvous_url, relay_mode, overwrite, auto_accept } = opts;
+    let ReceiveOpts {
+        output,
+        data_dir,
+        rendezvous_url,
+        relay_mode,
+        overwrite,
+        auto_accept,
+    } = opts;
 
     // 1. Get the code.
     let code = match code {
@@ -234,8 +241,8 @@ where
         _ = &mut interrupt => return Ok(ReceiveOutcome::Cancelled),
         result = rv.claim(nameplate) => result?,
     };
-    let ticket = BlobTicket::from_str(&ticket_str)
-        .map_err(|_| RecvError::Ticket(ticket_str.clone()))?;
+    let ticket =
+        BlobTicket::from_str(&ticket_str).map_err(|_| RecvError::Ticket(ticket_str.clone()))?;
 
     // 4. Build the engine (receivers download blobs; no extra handler needed).
     let relay_enabled = !matches!(relay_mode, RelayMode::Disabled);
@@ -261,7 +268,11 @@ where
         &engine,
         ticket,
         &words,
-        InnerOpts { output, overwrite, auto_accept },
+        InnerOpts {
+            output,
+            overwrite,
+            auto_accept,
+        },
         &data_dir,
         &mut interrupt,
     )
@@ -289,7 +300,11 @@ async fn run_receive_inner<I>(
 where
     I: Future<Output = ()> + Unpin,
 {
-    let InnerOpts { output, overwrite, auto_accept } = inner;
+    let InnerOpts {
+        output,
+        overwrite,
+        auto_accept,
+    } = inner;
     let output = output.unwrap_or_else(|| PathBuf::from("."));
     let output = std::path::absolute(&output).map_err(|source| {
         RecvError::Receive(ReceiveError::TargetDirResolve {
@@ -445,39 +460,35 @@ where
     bar.finish_and_clear();
 
     match receive_result {
-            Ok(result) => {
-                send_message(
-                    &mut send,
-                    &ControlMessage::Result {
-                        bytes: result.bytes,
-                        files: result.files as u32,
-                    },
-                )
-                .await?;
-                wire::await_peer_close(&mut recv, "sender to close after result").await?;
-                session.transition(Transition::Completed).await?;
-                Ok(ReceiveOutcome::Completed {
+        Ok(result) => {
+            send_message(
+                &mut send,
+                &ControlMessage::Result {
                     bytes: result.bytes,
-                    files: result.files,
-                })
-            }
-            Err(err) => {
-                let _ = send_message(&mut send, &ControlMessage::Cancel).await;
-                session.cancel().await?;
-                Err(RecvError::Receive(err))
-            }
+                    files: result.files as u32,
+                },
+            )
+            .await?;
+            wire::await_peer_close(&mut recv, "sender to close after result").await?;
+            session.transition(Transition::Completed).await?;
+            Ok(ReceiveOutcome::Completed {
+                bytes: result.bytes,
+                files: result.files,
+            })
         }
+        Err(err) => {
+            let _ = send_message(&mut send, &ControlMessage::Cancel).await;
+            session.cancel().await?;
+            Err(RecvError::Receive(err))
+        }
+    }
 }
 
 /// Check whether a resume record exists for this collection + target dir,
 /// and if so, prompt the user. Returns true only when the user accepts the
 /// resume; a declined resume (or a timeout/EOF default-no) deletes the stale
 /// record so the download restarts fresh (and re-persists progress).
-async fn check_resume(
-    data_dir: &Path,
-    ticket: &BlobTicket,
-    target_dir: &Path,
-) -> bool {
+async fn check_resume(data_dir: &Path, ticket: &BlobTicket, target_dir: &Path) -> bool {
     let records = RecordStore::new(data_dir);
     let hash = ticket.hash();
     if records.load(&hash, target_dir).await.is_none() {
@@ -504,10 +515,7 @@ async fn check_resume(
 }
 
 /// Display the offer to the user: file names + total bytes.
-fn display_offer(
-    files: &[my_croc_core::session::control::FileMeta],
-    total_bytes: u64,
-) {
+fn display_offer(files: &[my_croc_core::session::control::FileMeta], total_bytes: u64) {
     eprintln!(
         "发送方发来了 {} 个文件（{}） / Sender offers {} files ({} total):",
         files.len(),

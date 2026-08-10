@@ -138,5 +138,8 @@ fn config_field_lookup() {
         cfg.field("relay_url").expect("ok"),
         "http://relay.example:3340"
     );
-    assert!(matches!(cfg.field("bogus"), Err(ConfigError::InvalidKey(_))));
+    assert!(matches!(
+        cfg.field("bogus"),
+        Err(ConfigError::InvalidKey(_))
+    ));
 }

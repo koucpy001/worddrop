@@ -14,22 +14,16 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
 };
 
 use iroh::{
-    endpoint::presets,
+    Endpoint, RelayMode, RelayUrl, RelayUrlParseError, SecretKey, endpoint::presets,
     protocol::Router,
-    Endpoint, RelayMode, RelayUrl, RelayUrlParseError, SecretKey,
 };
-use iroh_blobs::{
-    api::Store,
-    provider::events::EventSender,
-    store::fs::FsStore,
-    BlobsProtocol,
-};
+use iroh_blobs::{BlobsProtocol, api::Store, provider::events::EventSender, store::fs::FsStore};
 
 use crate::identity::Config;
 
@@ -53,17 +47,11 @@ pub enum Error {
     ///
     /// Guarded in-engine: `FsStore::load` blocks forever on a non-directory
     /// root (iroh-blobs 0.103), so we fail fast with a clear error instead.
-    DataDirNotDirectory {
-        path: PathBuf,
-    },
+    DataDirNotDirectory { path: PathBuf },
     /// Failed to bind the QUIC endpoint.
-    Bind {
-        source: iroh::endpoint::BindError,
-    },
+    Bind { source: iroh::endpoint::BindError },
     /// Router shutdown failed (a protocol handler panicked).
-    Shutdown {
-        message: String,
-    },
+    Shutdown { message: String },
 }
 
 impl fmt::Display for Error {
@@ -73,7 +61,11 @@ impl fmt::Display for Error {
                 write!(f, "invalid relay URL {url:?}: {source}")
             }
             Error::StoreLoad { dir, source } => {
-                write!(f, "failed to load blob store at {}: {source}", dir.display())
+                write!(
+                    f,
+                    "failed to load blob store at {}: {source}",
+                    dir.display()
+                )
             }
             Error::Bind { source } => write!(f, "failed to bind iroh endpoint: {source}"),
             Error::DataDirNotDirectory { path } => write!(
@@ -141,8 +133,10 @@ impl TransferEngine {
     /// `<data_dir>/blobs` and the endpoint uses the configured self-hosted
     /// relay URL.
     pub async fn new(config: &Config) -> Result<Self, Error> {
-        let relay = RelayUrl::from_str(&config.relay_url)
-            .map_err(|source| Error::RelayUrl { url: config.relay_url.clone(), source })?;
+        let relay = RelayUrl::from_str(&config.relay_url).map_err(|source| Error::RelayUrl {
+            url: config.relay_url.clone(),
+            source,
+        })?;
         Self::with_relay_mode(&config.data_dir, RelayMode::Custom(relay.into()), None).await
     }
 
@@ -228,10 +222,7 @@ impl TransferEngine {
             presets::N0,
         )
         .await?;
-        Ok(Self {
-            served,
-            ..engine
-        })
+        Ok(Self { served, ..engine })
     }
 
     async fn build(
@@ -245,13 +236,17 @@ impl TransferEngine {
         let store_dir = data_dir.join(BLOBS_DIR);
         for path in [data_dir, store_dir.as_path()] {
             if path.exists() && !path.is_dir() {
-                return Err(Error::DataDirNotDirectory { path: path.to_path_buf() });
+                return Err(Error::DataDirNotDirectory {
+                    path: path.to_path_buf(),
+                });
             }
         }
-        let store = FsStore::load(&store_dir).await.map_err(|source| Error::StoreLoad {
-            dir: store_dir,
-            source: Box::new(source),
-        })?;
+        let store = FsStore::load(&store_dir)
+            .await
+            .map_err(|source| Error::StoreLoad {
+                dir: store_dir,
+                source: Box::new(source),
+            })?;
         let mut alpns = vec![iroh_blobs::ALPN.to_vec()];
         if let Some((ref alpn, _)) = extra_handler {
             alpns.push(alpn.clone());
@@ -262,7 +257,10 @@ impl TransferEngine {
         if let Some(key) = secret_key {
             builder = builder.secret_key(key.clone());
         }
-        let endpoint = builder.bind().await.map_err(|source| Error::Bind { source })?;
+        let endpoint = builder
+            .bind()
+            .await
+            .map_err(|source| Error::Bind { source })?;
         let blobs = BlobsProtocol::new(&store, events);
         let mut router_builder = Router::builder(endpoint).accept(iroh_blobs::ALPN, blobs);
         if let Some((alpn, handler)) = extra_handler {
@@ -308,8 +306,9 @@ impl TransferEngine {
         self.router
             .shutdown()
             .await
-            .map_err(|source| Error::Shutdown { message: source.to_string() })?;
+            .map_err(|source| Error::Shutdown {
+                message: source.to_string(),
+            })?;
         Ok(())
     }
 }
-

@@ -25,6 +25,9 @@ n0-future = { workspace = true }
 # T3: HKDF key confirmation (versions already in lockfile via spake2's tree).
 hkdf = "0.12"
 sha2 = "0.10"
+# N4/F2: SessionKey ZeroizeOnDrop (zeroize already in the lockfile via
+# iroh/spake2's tree — only the dep edge is added).
+zeroize = "1"
 
 [dev-dependencies]
 # T11 e2e: spawn the axum rendezvous server in-process (programmatic start).

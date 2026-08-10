@@ -6,9 +6,9 @@ use std::{future::Future, time::Duration};
 
 use tokio::io::{AsyncRead, AsyncWrite};
 
+use my_croc_core::session::Session;
 use my_croc_core::session::control::{ControlMessage, send_message};
 use my_croc_core::session::state::Transition;
-use my_croc_core::session::Session;
 use my_croc_core::transfer::engine::TransferEngine;
 
 use crate::send::{SendError, SendOutcome};
@@ -37,7 +37,13 @@ pub(super) async fn transfer_phase<I>(
 where
     I: Future<Output = ()> + Unpin,
 {
-    let TransferContext { session, engine, ui, total, file_count } = ctx;
+    let TransferContext {
+        session,
+        engine,
+        ui,
+        total,
+        file_count,
+    } = ctx;
     let served_baseline = engine.served_bytes();
     let mut bar = ui.transfer_bar(total);
     let mut tick = tokio::time::interval(Duration::from_millis(100));

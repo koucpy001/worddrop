@@ -37,12 +37,14 @@ impl SessionPhase {
             (Self::PendingPair, Transition::PairConfirmed) => Ok(Self::Paired),
             (Self::Paired, Transition::TransferStarted) => Ok(Self::Transferring),
             (Self::Transferring, Transition::Completed) => Ok(Self::Done),
-            (Self::Created | Self::PendingPair | Self::Paired | Self::Transferring, Transition::Cancelled) => {
-                Ok(Self::Cancelled)
-            }
-            (Self::Created | Self::PendingPair | Self::Paired | Self::Transferring, Transition::Failed) => {
-                Ok(Self::Failed)
-            }
+            (
+                Self::Created | Self::PendingPair | Self::Paired | Self::Transferring,
+                Transition::Cancelled,
+            ) => Ok(Self::Cancelled),
+            (
+                Self::Created | Self::PendingPair | Self::Paired | Self::Transferring,
+                Transition::Failed,
+            ) => Ok(Self::Failed),
             (from, event) => Err(TransitionError { from, event }),
         }
     }
@@ -122,7 +124,9 @@ mod tests {
     #[test]
     fn session_state_start_pairing_advances_created_to_pending_pair() {
         assert_eq!(
-            SessionPhase::Created.transition(Transition::StartPairing).unwrap(),
+            SessionPhase::Created
+                .transition(Transition::StartPairing)
+                .unwrap(),
             SessionPhase::PendingPair
         );
     }
@@ -130,25 +134,35 @@ mod tests {
     #[test]
     fn session_state_legal_path_reaches_done() {
         let phase = SessionPhase::Created
-            .transition(Transition::StartPairing).unwrap()
-            .transition(Transition::PairConfirmed).unwrap()
-            .transition(Transition::TransferStarted).unwrap()
-            .transition(Transition::Completed).unwrap();
+            .transition(Transition::StartPairing)
+            .unwrap()
+            .transition(Transition::PairConfirmed)
+            .unwrap()
+            .transition(Transition::TransferStarted)
+            .unwrap()
+            .transition(Transition::Completed)
+            .unwrap();
         assert_eq!(phase, SessionPhase::Done);
     }
 
     #[test]
     fn session_state_skip_pair_stage_is_illegal() {
         assert_eq!(
-            SessionPhase::Created.transition(Transition::PairConfirmed).unwrap_err(),
+            SessionPhase::Created
+                .transition(Transition::PairConfirmed)
+                .unwrap_err(),
             error_for(SessionPhase::Created, Transition::PairConfirmed)
         );
         assert_eq!(
-            SessionPhase::PendingPair.transition(Transition::TransferStarted).unwrap_err(),
+            SessionPhase::PendingPair
+                .transition(Transition::TransferStarted)
+                .unwrap_err(),
             error_for(SessionPhase::PendingPair, Transition::TransferStarted)
         );
         assert_eq!(
-            SessionPhase::Paired.transition(Transition::Completed).unwrap_err(),
+            SessionPhase::Paired
+                .transition(Transition::Completed)
+                .unwrap_err(),
             error_for(SessionPhase::Paired, Transition::Completed)
         );
     }
@@ -199,7 +213,10 @@ mod tests {
             SessionPhase::Paired,
             SessionPhase::Transferring,
         ] {
-            assert_eq!(from.transition(Transition::Failed).unwrap(), SessionPhase::Failed);
+            assert_eq!(
+                from.transition(Transition::Failed).unwrap(),
+                SessionPhase::Failed
+            );
         }
     }
 
@@ -216,7 +233,9 @@ mod tests {
 
     #[test]
     fn session_state_transition_error_display_names_both_sides() {
-        let err = SessionPhase::Done.transition(Transition::TransferStarted).unwrap_err();
+        let err = SessionPhase::Done
+            .transition(Transition::TransferStarted)
+            .unwrap_err();
         let message = err.to_string();
         assert!(message.contains("done"), "message: {message}");
         assert!(message.contains("transfer_started"), "message: {message}");

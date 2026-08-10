@@ -1,7 +1,7 @@
 # my-croc-cli — Linux CLI
 # `my-croc send <paths...>` / `my-croc receive [--code CODE] [--output DIR]`,
-# word-code pairing + progress UI (indicatif). Command logic lands in T13-T15;
-# T12 scaffolds the command surface, config file, and error/exit-code mapping.
+# word-code pairing + progress UI (indicatif). Send/receive/config commands
+# are all fully implemented (pairing, transfer, resume, exit-code mapping).
 
 [package]
 name = "my-croc-cli"

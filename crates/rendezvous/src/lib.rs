@@ -17,7 +17,7 @@ use axum::routing::{get, post};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::mailbox::{ClaimError, Mailbox, Nameplate, RateLimiter, MAX_TICKET_LENGTH};
+use crate::mailbox::{ClaimError, MAX_TICKET_LENGTH, Mailbox, Nameplate, RateLimiter};
 
 pub mod mailbox;
 pub mod server;
@@ -187,11 +187,7 @@ async fn status(
 
 // ---- helpers -------------------------------------------------------------------
 
-fn rate_limit(
-    ip: IpAddr,
-    limiter: &Mutex<RateLimiter>,
-    limit: usize,
-) -> Result<(), ApiError> {
+fn rate_limit(ip: IpAddr, limiter: &Mutex<RateLimiter>, limit: usize) -> Result<(), ApiError> {
     if !limiter.lock().map_err(lock_error)?.check(ip, limit) {
         return Err(ApiError::new(
             StatusCode::TOO_MANY_REQUESTS,
@@ -203,7 +199,10 @@ fn rate_limit(
 
 fn validate_ticket(ticket: &str) -> Result<(), ApiError> {
     if ticket.trim().is_empty() {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "ticket must not be empty"));
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "ticket must not be empty",
+        ));
     }
     if ticket.len() > MAX_TICKET_LENGTH {
         return Err(ApiError::new(
@@ -219,7 +218,10 @@ fn invalid_nameplate(error: mailbox::NameplateError) -> ApiError {
 }
 
 fn lock_error<T>(_: std::sync::PoisonError<T>) -> ApiError {
-    ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "server state is unavailable")
+    ApiError::new(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "server state is unavailable",
+    )
 }
 
 fn now_epoch() -> u64 {

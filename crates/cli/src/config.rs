@@ -42,11 +42,17 @@ pub enum ConfigError {
     /// Failed to read an existing config file.
     Read { path: PathBuf, source: io::Error },
     /// The config file exists but is not valid TOML.
-    Parse { path: PathBuf, source: toml::de::Error },
+    Parse {
+        path: PathBuf,
+        source: toml::de::Error,
+    },
     /// Failed to write or atomically rename the config file.
     Write { path: PathBuf, source: io::Error },
     /// Failed to serialize the config to TOML.
-    Encode { path: PathBuf, source: toml::ser::Error },
+    Encode {
+        path: PathBuf,
+        source: toml::ser::Error,
+    },
     /// `config get/set` with a key that is not one of the four known fields.
     InvalidKey(String),
     /// `config set` with a value the field cannot take.
@@ -60,23 +66,46 @@ impl fmt::Display for ConfigError {
         match self {
             ConfigError::NoConfigDir(source) => write!(f, "{source}"),
             ConfigError::Read { path, source } => {
-                write!(f, "读取配置文件失败 {}: {source} / failed to read config file {}: {source}", path.display(), path.display())
+                write!(
+                    f,
+                    "读取配置文件失败 {}: {source} / failed to read config file {}: {source}",
+                    path.display(),
+                    path.display()
+                )
             }
             ConfigError::Parse { path, source } => {
-                write!(f, "配置文件无效 {}: {source} / invalid config file {}: {source}", path.display(), path.display())
+                write!(
+                    f,
+                    "配置文件无效 {}: {source} / invalid config file {}: {source}",
+                    path.display(),
+                    path.display()
+                )
             }
             ConfigError::Write { path, source } => {
-                write!(f, "写入配置文件失败 {}: {source} / failed to write config file {}: {source}", path.display(), path.display())
+                write!(
+                    f,
+                    "写入配置文件失败 {}: {source} / failed to write config file {}: {source}",
+                    path.display(),
+                    path.display()
+                )
             }
             ConfigError::Encode { path, source } => {
-                write!(f, "配置文件编码失败 {}: {source} / failed to encode config file {}: {source}", path.display(), path.display())
+                write!(
+                    f,
+                    "配置文件编码失败 {}: {source} / failed to encode config file {}: {source}",
+                    path.display(),
+                    path.display()
+                )
             }
             ConfigError::InvalidKey(key) => write!(
                 f,
                 "未知配置项 {key:?}（有效项：rendezvous_url、relay_url、data_dir、overwrite） / unknown config key {key:?}; valid keys: rendezvous_url, relay_url, data_dir, overwrite"
             ),
             ConfigError::InvalidValue { key, reason } => {
-                write!(f, "配置项 {key:?} 的值无效: {reason} / invalid value for config key {key:?}: {reason}")
+                write!(
+                    f,
+                    "配置项 {key:?} 的值无效: {reason} / invalid value for config key {key:?}: {reason}"
+                )
             }
         }
     }
@@ -86,9 +115,7 @@ impl std::error::Error for ConfigError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             ConfigError::NoConfigDir(source) => Some(source),
-            ConfigError::Read { source, .. } | ConfigError::Write { source, .. } => {
-                Some(source)
-            }
+            ConfigError::Read { source, .. } | ConfigError::Write { source, .. } => Some(source),
             ConfigError::Parse { source, .. } => Some(source),
             ConfigError::Encode { source, .. } => Some(source),
             ConfigError::InvalidKey(_) | ConfigError::InvalidValue { .. } => None,
