@@ -18,6 +18,50 @@ for the work plan and todos.
 - `crates/cli` — Linux CLI (send/receive by word code)
 - `flutter/app` — Flutter GUI (Linux desktop + Android), native bridge via flutter_rust_bridge + cargokit
 
+## Install (安装)
+
+### Linux CLI
+
+版本从 `cargo build` 时的 `Cargo.toml` 编译进二进制（`my-croc --version`），无运行时 env 覆盖。
+
+两种方式任选其一：
+
+1. 源码构建（推荐，当前版本）：
+
+   ```sh
+   cargo build --release -j 2          # release profile: opt-level=z, lto, strip
+   install -m 0755 target/release/my-croc ~/.local/bin/
+   ```
+
+2. 下载预编译二进制：仓库推送到 GitHub 后，从 Actions 工件（`my-croc` linux artifact）下载，
+   解压后 `chmod +x my-croc` 并放入 `PATH`。本机不提供静态链接（依赖系统 glibc）。
+
+用法：`my-croc send <file...>` / `my-croc receive --code <word-code>`（详见 `--help`）。
+
+### Android（APK / AAB）
+
+Release 包在 `flutter/app/build/app/outputs/` 下：
+
+- APK：`flutter-apk/app-release.apk` — 直接安装：`adb install -r` 或拷贝到手机
+  （首次需允许"安装未知来源应用"）。
+- AAB：`bundle/app-release.aab` — 用于上架 Google Play 商店（当前未上架，仅本地构建产物）。
+
+签名说明：release 构建暂用 debug 签名密钥（`build.gradle.kts` 中
+`signingConfig = signingConfigs.getByName("debug")`）——仅适用于自用安装，
+正式分发前需换成正式签名。
+
+### Windows / macOS GUI（CI 构建，未签名）
+
+本开发机为 Linux 主机，无法本地构建 Windows/macOS 目标——`my-croc.exe` 与
+macOS `.app` 由 GitHub Actions（`.github/workflows/ci.yml`）在仓库推送后自动构建并
+作为 CI 工件提供。两个平台均为**未签名**构建，安装时会有系统警告：
+
+- **Windows**：SmartScreen 会提示"未知发布者"。点击"更多信息" → "仍要运行"即可
+  （Microsoft Defender 无法验证发布者，因为二进制未签名）。
+- **macOS**：Gatekeeper 会阻止直接打开（未签名 + 未公证）。右键点击 `.app` →
+  **打开**（Open）→ 再次确认即可。注意：公证（notarization）需要付费 Apple
+  Developer 账号，本项目明确不做（out of scope）。
+
 ## Android 设备测试清单 (deferred — needs a physical device)
 
 T20/T21 的验收只到 `flutter build apk --debug` + `flutter test`（构建机无
