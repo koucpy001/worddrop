@@ -1,30 +1,44 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Home screen smoke test: the two pairing entries render and navigate.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:app/main.dart';
+import 'package:app/screens/receive_screen.dart';
+import 'package:app/screens/send_screen.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('home screen shows both pairing entries', (tester) async {
+    await tester.pumpWidget(MyApp(
+      backendFactory: (_) async => throw StateError('not used on home'),
+    ));
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.text('my-croc'), findsOneWidget);
+    expect(find.text('发送文件'), findsOneWidget);
+    expect(find.text('接收文件'), findsOneWidget);
+    expect(find.text('跨网络安全传输文件'), findsOneWidget);
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  testWidgets('tapping 发送文件 opens the send screen', (tester) async {
+    await tester.pumpWidget(MyApp(
+      backendFactory: (_) async => throw StateError('not used on home'),
+    ));
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    await tester.tap(find.text('发送文件'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SendScreen), findsOneWidget);
+    expect(find.text('选择要发送的文件'), findsOneWidget);
+  });
+
+  testWidgets('tapping 接收文件 opens the receive screen', (tester) async {
+    await tester.pumpWidget(MyApp(
+      backendFactory: (_) async => throw StateError('not used on home'),
+    ));
+
+    await tester.tap(find.text('接收文件'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ReceiveScreen), findsOneWidget);
+    expect(find.text('输入配对码'), findsOneWidget);
   });
 }

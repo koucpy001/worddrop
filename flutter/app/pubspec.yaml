@@ -39,6 +39,7 @@ dependencies:
   flutter_rust_bridge: 2.12.0
   my_croc_bridge:
     path: ../rust_builder
+  file_picker: ^11.0.3
 
 dev_dependencies:
   flutter_test:
