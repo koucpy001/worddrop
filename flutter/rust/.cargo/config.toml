@@ -1,0 +1,6 @@
+# T17: share the ROOT workspace target dir so the bridge crate's iroh tree
+# (8G+) reuses root-target increments instead of rebuilding a second tree.
+# Without this, flutter/rust builds its own target/ and the disk fills up
+# (observed: no-space-on-device at 100%).
+[build]
+target-dir = "../../target"
