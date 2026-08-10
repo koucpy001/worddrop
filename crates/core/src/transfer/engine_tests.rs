@@ -239,3 +239,66 @@ async fn resume_spike_partial_download_then_reget_fetches_only_missing() {
     cleanup(&sender_dir);
     cleanup(&recv_dir);
 }
+
+/// T13: with `track_served_bytes` the engine counts payload bytes served to a
+/// receiving peer; a plain engine reports 0. The count is used for the
+/// send-side progress bar (`served - baseline` over the prepared total).
+#[tokio::test]
+async fn served_bytes_tracks_payload_served_to_receiver() {
+    use crate::transfer::engine::EngineSpec;
+    use crate::transfer::receive::ReceiveOptions;
+    use crate::transfer::send::ProgressEvent;
+
+    let sender_dir = temp_dir("served-sender");
+    let recv_dir = temp_dir("served-recv");
+    let output = temp_dir("served-output");
+    let fixture = temp_dir("served-fixture");
+    let file = fixture.join("data.bin");
+    fs::write(&file, payload(1024 * 1024)).expect("write fixture");
+
+    let sender = TransferEngine::new_spec(EngineSpec {
+        data_dir: &sender_dir,
+        relay_mode: RelayMode::Disabled,
+        secret_key: None,
+        extra_handler: None,
+        track_served_bytes: true,
+    })
+    .await
+    .expect("sender engine");
+    let receiver = TransferEngine::with_relay_mode(&recv_dir, RelayMode::Disabled, None)
+        .await
+        .expect("receiver engine");
+
+    assert_eq!(sender.served_bytes(), 0, "no requests yet");
+
+    let mut cb: Box<dyn FnMut(ProgressEvent) + Send> = Box::new(|_| {});
+    let prepared = sender.prepare_send(&[file], cb.as_mut()).await.expect("prepare");
+    let total = prepared.total_bytes;
+    let result = receiver
+        .receive(
+            &prepared.ticket,
+            ReceiveOptions { target_dir: output.clone(), overwrite: false },
+            &mut |_| {},
+        )
+        .await
+        .expect("receive completes");
+    assert_eq!(result.bytes, total);
+
+    // Give the per-request consumer tasks a moment to fold the last events.
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let served = sender.served_bytes();
+    assert!(
+        served >= total,
+        "served {served} >= payload {total} (meta/root blobs may add a few hundred bytes)"
+    );
+
+    let got = fs::read(output.join("data.bin")).expect("exported file");
+    assert_eq!(got.as_slice(), payload(1024 * 1024).as_slice());
+
+    sender.shutdown().await.expect("sender shutdown");
+    receiver.shutdown().await.expect("receiver shutdown");
+    cleanup(&sender_dir);
+    cleanup(&recv_dir);
+    cleanup(&output);
+    cleanup(&fixture);
+}

@@ -9,14 +9,27 @@
 //! [`RelayMode::Disabled`] so local in-process pairs never touch a public
 //! relay. No send/receive flow lives here — that is T8/T9.
 
-use std::{fmt, path::Path, path::PathBuf, str::FromStr};
+use std::{
+    fmt,
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+};
 
 use iroh::{
     endpoint::presets,
     protocol::Router,
     Endpoint, RelayMode, RelayUrl, RelayUrlParseError, SecretKey,
 };
-use iroh_blobs::{api::Store, store::fs::FsStore, BlobsProtocol};
+use iroh_blobs::{
+    api::Store,
+    provider::events::EventSender,
+    store::fs::FsStore,
+    BlobsProtocol,
+};
 
 use crate::identity::Config;
 
@@ -93,7 +106,35 @@ pub struct TransferEngine {
     /// The data dir the engine was created with: home of the blob store and
     /// of the transfer records (`<data_dir>/transfers/`, T10).
     data_dir: PathBuf,
+    /// Cumulative payload bytes served to receiving peers (T13 progress
+    /// plumbing). Only advances when the engine was built with
+    /// [`EngineSpec::track_served_bytes`].
+    served: Arc<AtomicU64>,
 }
+
+/// All knobs for constructing a [`TransferEngine`]. Bundled so the growing
+/// constructor surface stays under the 3-parameter ceiling; the plain
+/// constructors ([`TransferEngine::new`], [`TransferEngine::with_relay_mode`],
+/// [`TransferEngine::new_local`], [`TransferEngine::new_local_n0`]) fill in
+/// the defaults.
+pub struct EngineSpec<'a> {
+    /// Where the blob store lives (`<data_dir>/blobs`).
+    pub data_dir: &'a Path,
+    /// Relay mode for the endpoint.
+    pub relay_mode: RelayMode,
+    /// Pins the node id to a persisted identity (T4); `None` = ephemeral.
+    pub secret_key: Option<&'a SecretKey>,
+    /// An extra protocol handler registered on the router for `alpn`
+    /// (the pairing CONTROL_ALPN acceptor).
+    pub extra_handler: Option<(Vec<u8>, Box<dyn iroh::protocol::DynProtocolHandler>)>,
+    /// Enable provider serve-event tracking so [`TransferEngine::served_bytes`]
+    /// reports payload bytes served to receiving peers (drives the send-side
+    /// progress bar). Costs one spawned consumer task; the default
+    /// constructors leave it off.
+    pub track_served_bytes: bool,
+}
+
+mod events;
 
 impl TransferEngine {
     /// Create an engine from the core [`Config`]: the blob store lives at
@@ -115,7 +156,14 @@ impl TransferEngine {
         relay_mode: RelayMode,
         secret_key: Option<&SecretKey>,
     ) -> Result<Self, Error> {
-        Self::build(data_dir, relay_mode, secret_key, None, presets::N0).await
+        Self::new_spec(EngineSpec {
+            data_dir,
+            relay_mode,
+            secret_key,
+            extra_handler: None,
+            track_served_bytes: false,
+        })
+        .await
     }
 
     /// Create an engine for the local e2e (T11): `presets::Minimal` — no
@@ -132,7 +180,14 @@ impl TransferEngine {
         relay_mode: RelayMode,
         extra_handler: Option<(Vec<u8>, Box<dyn iroh::protocol::DynProtocolHandler>)>,
     ) -> Result<Self, Error> {
-        Self::build(data_dir, relay_mode, None, extra_handler, presets::Minimal).await
+        Self::new_spec(EngineSpec {
+            data_dir,
+            relay_mode,
+            secret_key: None,
+            extra_handler,
+            track_served_bytes: false,
+        })
+        .await
     }
 
     /// Like [`new_local`](Self::new_local) but uses `presets::N0` (full
@@ -144,7 +199,39 @@ impl TransferEngine {
         relay_mode: RelayMode,
         extra_handler: Option<(Vec<u8>, Box<dyn iroh::protocol::DynProtocolHandler>)>,
     ) -> Result<Self, Error> {
-        Self::build(data_dir, relay_mode, None, extra_handler, presets::N0).await
+        Self::new_spec(EngineSpec {
+            data_dir,
+            relay_mode,
+            secret_key: None,
+            extra_handler,
+            track_served_bytes: false,
+        })
+        .await
+    }
+
+    /// The full engine constructor (T13 CLI): persisted identity, custom
+    /// relay, a CONTROL_ALPN acceptor, and optional serve-event tracking for
+    /// the send progress bar — every knob the CLI/GUI send flow needs.
+    pub async fn new_spec(spec: EngineSpec<'_>) -> Result<Self, Error> {
+        let served = Arc::new(AtomicU64::new(0));
+        let events = if spec.track_served_bytes {
+            Some(events::make_event_sender(served.clone()))
+        } else {
+            None
+        };
+        let engine = Self::build(
+            spec.data_dir,
+            spec.relay_mode,
+            spec.secret_key,
+            spec.extra_handler,
+            events,
+            presets::N0,
+        )
+        .await?;
+        Ok(Self {
+            served,
+            ..engine
+        })
     }
 
     async fn build(
@@ -152,6 +239,7 @@ impl TransferEngine {
         relay_mode: RelayMode,
         secret_key: Option<&SecretKey>,
         extra_handler: Option<(Vec<u8>, Box<dyn iroh::protocol::DynProtocolHandler>)>,
+        events: Option<EventSender>,
         preset: impl presets::Preset,
     ) -> Result<Self, Error> {
         let store_dir = data_dir.join(BLOBS_DIR);
@@ -175,13 +263,18 @@ impl TransferEngine {
             builder = builder.secret_key(key.clone());
         }
         let endpoint = builder.bind().await.map_err(|source| Error::Bind { source })?;
-        let blobs = BlobsProtocol::new(&store, None);
+        let blobs = BlobsProtocol::new(&store, events);
         let mut router_builder = Router::builder(endpoint).accept(iroh_blobs::ALPN, blobs);
         if let Some((alpn, handler)) = extra_handler {
             router_builder = router_builder.accept(alpn, handler);
         }
         let router = router_builder.spawn();
-        Ok(Self { router, store, data_dir: data_dir.to_path_buf() })
+        Ok(Self {
+            router,
+            store,
+            data_dir: data_dir.to_path_buf(),
+            served: Arc::new(AtomicU64::new(0)),
+        })
     }
 
     /// The bound endpoint (node id, direct addresses, connections).
@@ -200,6 +293,15 @@ impl TransferEngine {
         &self.data_dir
     }
 
+    /// Cumulative payload bytes served to receiving peers since the engine
+    /// was built (0 when [`EngineSpec::track_served_bytes`] was off, or
+    /// before the first request lands). Drives the send-side progress bar
+    /// (T13): the CLI takes a baseline at Accept and renders
+    /// `served - baseline` over the prepared total.
+    pub fn served_bytes(&self) -> u64 {
+        self.served.load(Ordering::Relaxed)
+    }
+
     /// Shut down the router (which shuts down the blobs protocol and closes
     /// the endpoint).
     pub async fn shutdown(self) -> Result<(), Error> {
@@ -210,3 +312,4 @@ impl TransferEngine {
         Ok(())
     }
 }
+
