@@ -1,6 +1,7 @@
 //! Subcommand dispatch. `send` runs the full T13 flow; `config` is fully
 //! functional (T12); `receive` is an argument-reporting stub until T14.
 
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -34,6 +35,31 @@ pub fn run(args: Cli) -> Result<String, CliError> {
     }
 }
 
+/// Which role this process plays; each role owns a private engine data dir.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Role {
+    Send,
+    Receive,
+}
+
+impl Role {
+    fn dir_name(self) -> &'static str {
+        match self {
+            Self::Send => "send",
+            Self::Receive => "receive",
+        }
+    }
+}
+
+/// The engine data dir for `role`: a per-role subdir of the configured base.
+/// The redb blob store (`blobs.db`) is exclusive to one process, so a sender
+/// and a receiver on the same machine must never open the same one — the
+/// second opener blocks forever in the store open (D3: receive hung after
+/// "creating or opening meta database" while the sender held the file lock).
+fn role_data_dir(base: &Path, role: Role) -> PathBuf {
+    base.join(role.dir_name())
+}
+
 /// `my-croc send <paths...>`: prepare, allocate a nameplate, pair with
 /// SPAKE2 (words only), transfer with a progress bar, cancel on Ctrl+C.
 fn send(args: SendArgs) -> Result<String, CliError> {
@@ -56,7 +82,7 @@ async fn send_async(args: SendArgs) -> Result<String, CliError> {
         CliError::runtime(format!("invalid relay URL {:?}: {source}", config.relay_url))
     })?;
     let engine = TransferEngine::new_spec(EngineSpec {
-        data_dir: &config.data_dir,
+        data_dir: &role_data_dir(&config.data_dir, Role::Send),
         relay_mode: RelayMode::Custom(relay_url.into()),
         secret_key: Some(identity.secret_key()),
         extra_handler: Some((CONTROL_ALPN.to_vec(), acceptor)),
@@ -137,7 +163,7 @@ async fn receive_async(args: ReceiveArgs) -> Result<String, CliError> {
             args.code,
             crate::receive::ReceiveOpts {
                 output: args.output,
-                data_dir: config.data_dir,
+                data_dir: role_data_dir(&config.data_dir, Role::Receive),
                 rendezvous_url: config.rendezvous_url.clone(),
                 relay_mode: RelayMode::Custom(relay_url.into()),
                 overwrite: config.overwrite,

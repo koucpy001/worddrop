@@ -196,3 +196,19 @@ fn recv_error_display_and_source() {
     assert!(err.to_string().contains("word-code error"));
     assert!(err.source().is_some());
 }
+
+#[test]
+fn role_data_dirs_are_private_per_role() {
+    // D3 regression: send and receive previously shared one engine data dir,
+    // so a concurrent pair on one machine deadlocked on the redb blob store
+    // (blobs.db is exclusive to one process — the receiver hung right after
+    // "creating or opening meta database" while the sender held the file
+    // lock). Each role must own a private subdir of the configured base.
+    let base = std::env::temp_dir().join("my-croc-role-base");
+    let send = commands::role_data_dir(&base, commands::Role::Send);
+    let recv = commands::role_data_dir(&base, commands::Role::Receive);
+    assert_eq!(send, base.join("send"));
+    assert_eq!(recv, base.join("receive"));
+    assert_ne!(send, recv, "send and receive must not share an engine data dir");
+    assert!(send.starts_with(&base) && recv.starts_with(&base));
+}
