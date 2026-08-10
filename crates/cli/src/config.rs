@@ -55,26 +55,28 @@ pub enum ConfigError {
 
 impl fmt::Display for ConfigError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // User-facing errors are bilingual (中文 + English) per the global
+        // copy rule; the English half keeps the historical wording.
         match self {
             ConfigError::NoConfigDir(source) => write!(f, "{source}"),
             ConfigError::Read { path, source } => {
-                write!(f, "failed to read config file {}: {source}", path.display())
+                write!(f, "读取配置文件失败 {}: {source} / failed to read config file {}: {source}", path.display(), path.display())
             }
             ConfigError::Parse { path, source } => {
-                write!(f, "invalid config file {}: {source}", path.display())
+                write!(f, "配置文件无效 {}: {source} / invalid config file {}: {source}", path.display(), path.display())
             }
             ConfigError::Write { path, source } => {
-                write!(f, "failed to write config file {}: {source}", path.display())
+                write!(f, "写入配置文件失败 {}: {source} / failed to write config file {}: {source}", path.display(), path.display())
             }
             ConfigError::Encode { path, source } => {
-                write!(f, "failed to encode config file {}: {source}", path.display())
+                write!(f, "配置文件编码失败 {}: {source} / failed to encode config file {}: {source}", path.display(), path.display())
             }
             ConfigError::InvalidKey(key) => write!(
                 f,
-                "unknown config key {key:?}; valid keys: rendezvous_url, relay_url, data_dir, overwrite"
+                "未知配置项 {key:?}（有效项：rendezvous_url、relay_url、data_dir、overwrite） / unknown config key {key:?}; valid keys: rendezvous_url, relay_url, data_dir, overwrite"
             ),
             ConfigError::InvalidValue { key, reason } => {
-                write!(f, "invalid value for config key {key:?}: {reason}")
+                write!(f, "配置项 {key:?} 的值无效: {reason} / invalid value for config key {key:?}: {reason}")
             }
         }
     }

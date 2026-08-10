@@ -79,13 +79,22 @@ pub enum PairError {
 
 impl fmt::Display for PairError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // User-facing errors are bilingual (中文 + English) per the global
+        // copy rule; the English half keeps the historical wording.
         match self {
-            Self::Io(err) => write!(f, "io error: {err}"),
-            Self::Control(err) => write!(f, "control error: {err}"),
-            Self::Wire(err) => write!(f, "wire error: {err}"),
-            Self::Spake(err) => write!(f, "pairing error: {err}"),
-            Self::Hung(what) => write!(f, "timed out waiting for {what}"),
-            Self::Not(kind) => write!(f, "expected {kind}, got a different message"),
+            Self::Io(err) => write!(f, "IO 错误 / io error: {err}"),
+            Self::Control(err) => write!(f, "控制错误 / control error: {err}"),
+            Self::Wire(err) => write!(f, "协议错误 / wire error: {err}"),
+            Self::Spake(SpakeError::ConfirmationMismatch) => write!(
+                f,
+                "配对码不匹配（请确认双方输入的配对码一致） / pairing code mismatch (check both sides entered the same code)"
+            ),
+            Self::Spake(err) => write!(f, "配对失败 / pairing error: {err}"),
+            Self::Hung(what) => write!(f, "等待 {what} 超时 / timed out waiting for {what}"),
+            Self::Not(kind) => write!(
+                f,
+                "预期 {kind}，收到其他消息 / expected {kind}, got a different message"
+            ),
         }
     }
 }

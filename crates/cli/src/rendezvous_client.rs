@@ -69,12 +69,21 @@ pub enum RvError {
 
 impl fmt::Display for RvError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // User-facing errors are bilingual (中文 + English) per the global
+        // copy rule; the English half keeps the historical wording.
         match self {
-            Self::Http { status, body } => write!(f, "rendezvous HTTP {status}: {body}"),
-            Self::Io(err) => write!(f, "rendezvous io error: {err}"),
-            Self::Timeout => write!(f, "rendezvous request timed out after {}s", REQUEST_TIMEOUT.as_secs()),
+            Self::Http { status, body } => {
+                write!(f, "服务器返回 {status}: {body} / rendezvous HTTP {status}: {body}")
+            }
+            Self::Io(err) => write!(f, "服务器连接错误 / rendezvous io error: {err}"),
+            Self::Timeout => write!(
+                f,
+                "服务器请求超时（{} 秒） / rendezvous request timed out after {}s",
+                REQUEST_TIMEOUT.as_secs(),
+                REQUEST_TIMEOUT.as_secs()
+            ),
             Self::Parse { kind, body } => {
-                write!(f, "failed to parse {kind} response: {body}")
+                write!(f, "解析 {kind} 响应失败 / failed to parse {kind} response: {body}")
             }
         }
     }

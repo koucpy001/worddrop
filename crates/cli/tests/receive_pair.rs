@@ -442,7 +442,7 @@ async fn receive_flow_wrong_words_fails_cleanly() {
     );
     let sender_is_mismatch = matches!(
         &sender_result,
-        Err(e) if e.contains("key-confirmation token mismatch")
+        Err(e) if e.contains("配对码不匹配") || e.contains("pairing code mismatch")
     );
 
     assert!(

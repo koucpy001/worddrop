@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::ProgressBar;
 use iroh::RelayMode;
 use iroh_blobs::ticket::BlobTicket;
 
@@ -32,7 +32,7 @@ use my_croc_core::transfer::receive::{ReceiveError, ReceiveOptions, ReceiveProgr
 use my_croc_core::transfer::record::RecordStore;
 
 use crate::rendezvous_client::{RvClient, RvError};
-use crate::ui::{PlainBar, UiBar};
+use crate::ui::{bar_style, human_bytes, spinner_style, PlainBar, UiBar};
 use crate::wire::{self, CONTROL_ALPN, PAIR_TIMEOUT};
 
 /// How long to wait for the user offer prompt.
@@ -40,23 +40,6 @@ const PROMPT_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// How long to wait for the code prompt (when not given via --code).
 const CODE_PROMPT_TIMEOUT: Duration = Duration::from_secs(120);
-
-/// Spinner tick glyphs (croc-style braille dots).
-const SPINNER_TICKS: &str = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
-
-fn spinner_style() -> ProgressStyle {
-    ProgressStyle::with_template("{spinner:.green} {msg}")
-        .expect("valid spinner template")
-        .tick_chars(SPINNER_TICKS)
-}
-
-fn bar_style() -> ProgressStyle {
-    ProgressStyle::with_template(
-        "{spinner:.green} {msg} [{wide_bar:.cyan/blue}] {percent}% {bytes}/{total_bytes} ({bytes_per_sec}, ETA {eta})",
-    )
-    .expect("valid bar template")
-    .tick_chars(SPINNER_TICKS)
-}
 
 /// How the receive flow ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -102,20 +85,25 @@ pub enum RecvError {
 
 impl fmt::Display for RecvError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // User-facing errors are bilingual (中文 + English) per the global
+        // copy rule; the English half keeps the historical wording so
+        // scripted checks on the English substring keep working.
         match self {
-            Self::Word(err) => write!(f, "word-code error: {err}"),
-            Self::Rv(err) => write!(f, "rendezvous error: {err}"),
-            Self::Ticket(t) => write!(f, "invalid ticket: {t}"),
-            Self::Engine(err) => write!(f, "engine error: {err}"),
-            Self::RelayHung => write!(f, "timed out contacting the relay"),
-            Self::Pair(err) => write!(f, "pairing error: {err}"),
-            Self::Control(err) => write!(f, "control error: {err}"),
-            Self::Transition(err) => write!(f, "session error: {err}"),
-            Self::UnexpectedMessage(m) => write!(f, "unexpected control message: {m:?}"),
-            Self::Receive(err) => write!(f, "receive error: {err}"),
-            Self::Connection(err) => write!(f, "connection error: {err}"),
-            Self::Hung(what) => write!(f, "timed out waiting for {what}"),
-            Self::NoCode => write!(f, "no pairing code provided"),
+            Self::Word(err) => write!(f, "配对码格式错误 / word-code error: {err}"),
+            Self::Rv(err) => write!(f, "服务器错误 / rendezvous error: {err}"),
+            Self::Ticket(t) => write!(f, "无效的票据 / invalid ticket: {t}"),
+            Self::Engine(err) => write!(f, "传输引擎错误 / engine error: {err}"),
+            Self::RelayHung => write!(f, "连接中继服务器超时 / timed out contacting the relay"),
+            Self::Pair(err) => write!(f, "配对失败 / pairing error: {err}"),
+            Self::Control(err) => write!(f, "控制通道错误 / control error: {err}"),
+            Self::Transition(err) => write!(f, "会话状态错误 / session error: {err}"),
+            Self::UnexpectedMessage(m) => {
+                write!(f, "意外的控制消息 / unexpected control message: {m:?}")
+            }
+            Self::Receive(err) => write!(f, "接收错误 / receive error: {err}"),
+            Self::Connection(err) => write!(f, "连接错误 / connection error: {err}"),
+            Self::Hung(what) => write!(f, "等待 {what} 超时 / timed out waiting for {what}"),
+            Self::NoCode => write!(f, "未提供配对码 / no pairing code provided"),
         }
     }
 }
@@ -367,6 +355,7 @@ where
         }
     }
     pairing.finish_and_clear();
+    eprintln!("配对成功 / Paired successfully");
 
     let session = Session::new();
     session.transition(Transition::StartPairing).await?;
@@ -425,8 +414,9 @@ where
     send_message(&mut send, &ControlMessage::Accept).await?;
     session.transition(Transition::TransferStarted).await?;
 
-    // Check for resume record.
-    let resume = check_resume(data_dir, &ticket, &output).await;
+    // Prompt for resume when a record exists; check_resume also drops a
+    // declined record so the download below starts fresh.
+    check_resume(data_dir, &ticket, &output).await;
 
     let mut bar = progress_bar(total_bytes);
     let mut bar_for_cb = bar.clone();
@@ -437,29 +427,21 @@ where
         }
     };
 
-    let receive_result = if resume {
-        engine
-            .receive_resumable(
-                &ticket,
-                ReceiveOptions {
-                    target_dir: output.clone(),
-                    overwrite,
-                },
-                &mut progress_cb,
-            )
-            .await
-    } else {
-        engine
-            .receive(
-                &ticket,
-                ReceiveOptions {
-                    target_dir: output,
-                    overwrite,
-                },
-                &mut progress_cb,
-            )
-            .await
-    };
+    // Always download through the record-backed path: an interrupted first
+    // transfer must leave a resume record on disk (the resume prompt needs
+    // one; plain `receive` never writes a record). The record loaded by
+    // `receive_resumable` continues the old transfer when the user accepted
+    // the resume prompt, and a fresh one otherwise.
+    let receive_result = engine
+        .receive_resumable(
+            &ticket,
+            ReceiveOptions {
+                target_dir: output,
+                overwrite,
+            },
+            &mut progress_cb,
+        )
+        .await;
     bar.finish_and_clear();
 
     match receive_result {
@@ -488,7 +470,9 @@ where
 }
 
 /// Check whether a resume record exists for this collection + target dir,
-/// and if so, prompt the user.
+/// and if so, prompt the user. Returns true only when the user accepts the
+/// resume; a declined resume (or a timeout/EOF default-no) deletes the stale
+/// record so the download restarts fresh (and re-persists progress).
 async fn check_resume(
     data_dir: &Path,
     ticket: &BlobTicket,
@@ -506,9 +490,16 @@ async fn check_resume(
                 eprintln!();
             }
             let trimmed = line.trim().to_lowercase();
-            trimmed == "y" || trimmed == "yes"
+            let resume = trimmed == "y" || trimmed == "yes";
+            if !resume {
+                let _ = records.delete(&hash).await;
+            }
+            resume
         }
-        _ => false,
+        _ => {
+            let _ = records.delete(&hash).await;
+            false
+        }
     }
 }
 
@@ -517,11 +508,12 @@ fn display_offer(
     files: &[my_croc_core::session::control::FileMeta],
     total_bytes: u64,
 ) {
-    use crate::ui::human_bytes;
     eprintln!(
-        "接收方发来了 {} 个文件 ({}):",
+        "发送方发来了 {} 个文件（{}） / Sender offers {} files ({} total):",
         files.len(),
-        human_bytes(total_bytes)
+        human_bytes(total_bytes),
+        files.len(),
+        human_bytes(total_bytes),
     );
     for file in files {
         eprintln!("  {} ({})", file.name, human_bytes(file.size));

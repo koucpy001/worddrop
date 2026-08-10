@@ -76,26 +76,31 @@ pub enum SendError {
 
 impl fmt::Display for SendError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // User-facing errors are bilingual (中文 + English) per the global
+        // copy rule; the English half keeps the historical wording.
         match self {
             Self::Prepare(err) => write!(f, "{err}"),
-            Self::Rv(err) => write!(f, "rendezvous error: {err}"),
-            Self::Word(err) => write!(f, "word-code error: {err}"),
-            Self::Pair(err) => write!(f, "pairing error: {err}"),
-            Self::Control(err) => write!(f, "control error: {err}"),
-            Self::Transition(err) => write!(f, "session error: {err}"),
-            Self::Connection(err) => write!(f, "control stream error: {err}"),
-            Self::AcceptorClosed => write!(f, "control acceptor closed before any receiver dialed in"),
+            Self::Rv(err) => write!(f, "服务器错误 / rendezvous error: {err}"),
+            Self::Word(err) => write!(f, "配对码生成失败 / word-code error: {err}"),
+            Self::Pair(err) => write!(f, "配对失败 / pairing error: {err}"),
+            Self::Control(err) => write!(f, "控制通道错误 / control error: {err}"),
+            Self::Transition(err) => write!(f, "会话状态错误 / session error: {err}"),
+            Self::Connection(err) => write!(f, "控制通道错误 / control stream error: {err}"),
+            Self::AcceptorClosed => write!(
+                f,
+                "配对连接通道意外关闭，未收到接收方连接 / control acceptor closed before any receiver dialed in"
+            ),
             Self::UnexpectedMessage(message) => {
-                write!(f, "unexpected control message: {message:?}")
+                write!(f, "意外的控制消息 / unexpected control message: {message:?}")
             }
             Self::ResultMismatch { expected_bytes, expected_files, got_bytes, got_files } => {
                 write!(
                     f,
-                    "receiver result mismatch: expected {expected_bytes} bytes / {expected_files} \
+                    "接收方结果与预期不符 / receiver result mismatch: expected {expected_bytes} bytes / {expected_files} \
                      files, got {got_bytes} / {got_files}"
                 )
             }
-            Self::Hung(what) => write!(f, "timed out waiting for {what}"),
+            Self::Hung(what) => write!(f, "等待 {what} 超时 / timed out waiting for {what}"),
         }
     }
 }
@@ -239,6 +244,7 @@ where
     let _key = spake_sender_side(&mut send, &mut recv, words.as_bytes()).await?;
     session.transition(Transition::PairConfirmed).await?;
     waiting.finish_and_clear();
+    ui.note("配对成功，开始传输... / Paired, starting transfer...");
 
     // 6. Offer.
     let offer = ControlMessage::Offer {

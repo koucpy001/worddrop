@@ -63,8 +63,9 @@ fn role_data_dir(base: &Path, role: Role) -> PathBuf {
 /// `my-croc send <paths...>`: prepare, allocate a nameplate, pair with
 /// SPAKE2 (words only), transfer with a progress bar, cancel on Ctrl+C.
 fn send(args: SendArgs) -> Result<String, CliError> {
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|source| CliError::runtime(format!("failed to start async runtime: {source}")))?;
+    let runtime = tokio::runtime::Runtime::new().map_err(|source| {
+        CliError::runtime(format!("无法启动异步运行时 / failed to start async runtime: {source}"))
+    })?;
     runtime.block_on(send_async(args))
 }
 
@@ -79,7 +80,10 @@ async fn send_async(args: SendArgs) -> Result<String, CliError> {
     let acceptor: Box<dyn iroh::protocol::DynProtocolHandler> =
         ControlAcceptor::new(control_tx).into();
     let relay_url = RelayUrl::from_str(&config.relay_url).map_err(|source| {
-        CliError::runtime(format!("invalid relay URL {:?}: {source}", config.relay_url))
+        CliError::runtime(format!(
+            "无效的中继地址 {:?} / invalid relay URL {:?}: {source}",
+            config.relay_url, config.relay_url
+        ))
     })?;
     let engine = TransferEngine::new_spec(EngineSpec {
         data_dir: &role_data_dir(&config.data_dir, Role::Send),
@@ -89,7 +93,9 @@ async fn send_async(args: SendArgs) -> Result<String, CliError> {
         track_served_bytes: true,
     })
     .await
-    .map_err(|source| CliError::runtime(format!("failed to start transfer engine: {source}")))?;
+    .map_err(|source| {
+        CliError::runtime(format!("无法启动传输引擎 / failed to start transfer engine: {source}"))
+    })?;
 
     // The ticket must carry the relay URL: wait for relay contact before
     // preparing the transfer (T11 learning: `online()` after bind).
@@ -100,7 +106,7 @@ async fn send_async(args: SendArgs) -> Result<String, CliError> {
         .await
         .map_err(|_| {
             CliError::runtime(format!(
-                "timed out contacting relay server {} after 15s",
+                "连接中继服务器超时（15 秒） / timed out contacting relay server {} after 15s",
                 config.relay_url
             ))
         })?;
@@ -124,17 +130,22 @@ async fn send_async(args: SendArgs) -> Result<String, CliError> {
     .await
     .map_err(|_| {
         CliError::runtime(format!(
-            "flow exceeded the {}s limit",
+            "传输流程超过 {} 秒上限 / flow exceeded the {}s limit",
+            FLOW_TIMEOUT.as_secs(),
             FLOW_TIMEOUT.as_secs()
         ))
     })??;
 
     let summary = match outcome {
-        SendOutcome::Completed { bytes, files } => {
-            format!("传输完成：{files} 个文件，{}\n", human_bytes(bytes))
+        SendOutcome::Completed { bytes, files } => format!(
+            "传输完成：{files} 个文件，{} / Transfer complete: {files} files, {}\n",
+            human_bytes(bytes),
+            human_bytes(bytes)
+        ),
+        SendOutcome::Declined { reason } => {
+            format!("接收方已拒绝：{reason} / Receiver declined: {reason}\n")
         }
-        SendOutcome::Declined { reason } => format!("接收方已拒绝：{reason}\n"),
-        SendOutcome::Cancelled => "已取消\n".to_string(),
+        SendOutcome::Cancelled => "已取消 / Cancelled\n".to_string(),
     };
     Ok(summary)
 }
@@ -145,8 +156,9 @@ async fn send_async(args: SendArgs) -> Result<String, CliError> {
 /// WORDS as password, receive Offer → prompt accept/decline (interactive,
 /// default no after 60s), on accept → download + export with progress.
 fn receive(args: ReceiveArgs) -> Result<String, CliError> {
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|source| CliError::runtime(format!("failed to start async runtime: {source}")))?;
+    let runtime = tokio::runtime::Runtime::new().map_err(|source| {
+        CliError::runtime(format!("无法启动异步运行时 / failed to start async runtime: {source}"))
+    })?;
     runtime.block_on(receive_async(args))
 }
 
@@ -155,8 +167,12 @@ async fn receive_async(args: ReceiveArgs) -> Result<String, CliError> {
     let interrupt = Box::pin(async {
         let _ = tokio::signal::ctrl_c().await;
     });
-    let relay_url = RelayUrl::from_str(&config.relay_url)
-        .map_err(|source| CliError::runtime(format!("invalid relay URL {:?}: {}", config.relay_url, source)))?;
+    let relay_url = RelayUrl::from_str(&config.relay_url).map_err(|source| {
+        CliError::runtime(format!(
+            "无效的中继地址 {:?} / invalid relay URL {:?}: {source}",
+            config.relay_url, config.relay_url
+        ))
+    })?;
     let outcome = tokio::time::timeout(
         FLOW_TIMEOUT,
         crate::receive::run_receive(
@@ -175,17 +191,20 @@ async fn receive_async(args: ReceiveArgs) -> Result<String, CliError> {
     .await
     .map_err(|_| {
         CliError::runtime(format!(
-            "flow exceeded the {}s limit",
+            "传输流程超过 {} 秒上限 / flow exceeded the {}s limit",
+            FLOW_TIMEOUT.as_secs(),
             FLOW_TIMEOUT.as_secs()
         ))
     })??;
 
     let summary = match outcome {
-        crate::receive::ReceiveOutcome::Completed { bytes, files } => {
-            format!("传输完成：{files} 个文件，{}\n", human_bytes(bytes))
-        }
-        crate::receive::ReceiveOutcome::Declined => "已拒绝\n".to_string(),
-        crate::receive::ReceiveOutcome::Cancelled => "已取消\n".to_string(),
+        crate::receive::ReceiveOutcome::Completed { bytes, files } => format!(
+            "传输完成：{files} 个文件，{} / Transfer complete: {files} files, {}\n",
+            human_bytes(bytes),
+            human_bytes(bytes)
+        ),
+        crate::receive::ReceiveOutcome::Declined => "已拒绝 / Declined\n".to_string(),
+        crate::receive::ReceiveOutcome::Cancelled => "已取消 / Cancelled\n".to_string(),
     };
     Ok(summary)
 }

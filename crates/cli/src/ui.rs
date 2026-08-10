@@ -13,24 +13,37 @@
 
 use std::io::IsTerminal;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressState, ProgressStyle};
 
 /// Spinner tick glyphs (croc-style braille dots).
 const SPINNER_TICKS: &str = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
 
-fn spinner_style() -> ProgressStyle {
+/// The pairing/connecting spinner style (shared by send and receive).
+pub(crate) fn spinner_style() -> ProgressStyle {
     ProgressStyle::with_template("{spinner:.green} {msg}")
         .expect("valid spinner template")
         .tick_chars(SPINNER_TICKS)
 }
 
-fn bar_style() -> ProgressStyle {
+/// The transfer-bar style: percent + human-readable binary byte counts
+/// (KiB/MiB, croc-style — indicatif's built-in `{bytes}` keys use SI units)
+/// plus speed and ETA.
+pub(crate) fn bar_style() -> ProgressStyle {
     ProgressStyle::with_template(
-        "{spinner:.green} {msg} [{wide_bar:.cyan/blue}] {percent}% {bytes}/{total_bytes} ({bytes_per_sec}, ETA {eta})",
+        "{spinner:.green} {msg} [{wide_bar:.cyan/blue}] {percent}% {human_bytes}/{human_total} ({human_per_sec}, ETA {eta})",
     )
     .expect("valid bar template")
+    .with_key("human_bytes", |state: &ProgressState, w: &mut dyn std::fmt::Write| {
+        let _ = write!(w, "{}", human_bytes(state.pos()));
+    })
+    .with_key("human_total", |state: &ProgressState, w: &mut dyn std::fmt::Write| {
+        let _ = write!(w, "{}", human_bytes(state.len().unwrap_or(0)));
+    })
+    .with_key("human_per_sec", |state: &ProgressState, w: &mut dyn std::fmt::Write| {
+        let _ = write!(w, "{}", human_bytes(state.per_sec() as u64));
+    })
     .tick_chars(SPINNER_TICKS)
 }
 
@@ -89,6 +102,7 @@ pub struct PlainBar {
 #[derive(Debug)]
 struct PlainState {
     last_reported: u64,
+    last_at: Option<Instant>,
     finished: bool,
 }
 
@@ -101,7 +115,11 @@ impl PlainBar {
         let bar = Self {
             msg: msg.to_string(),
             total: 0,
-            state: Arc::new(Mutex::new(PlainState { last_reported: 0, finished: false })),
+            state: Arc::new(Mutex::new(PlainState {
+                last_reported: 0,
+                last_at: None,
+                finished: false,
+            })),
         };
         eprintln!("{msg}");
         bar
@@ -113,7 +131,11 @@ impl PlainBar {
         let bar = Self {
             msg: msg.to_string(),
             total,
-            state: Arc::new(Mutex::new(PlainState { last_reported: 0, finished: false })),
+            state: Arc::new(Mutex::new(PlainState {
+                last_reported: 0,
+                last_at: Some(Instant::now()),
+                finished: false,
+            })),
         };
         if total > 0 {
             eprintln!("{}", progress_line(msg, 0, total));
@@ -126,22 +148,32 @@ impl PlainBar {
     }
 
     pub fn set_position(&mut self, position: u64) {
-        if let Some(line) = self.line_for(position) {
-            eprintln!("{line}");
+        if let Some((_, speed)) = self.report_line(position) {
+            eprintln!("{}", progress_line_with_speed(&self.msg, position, self.total, speed));
         }
     }
 
     pub fn finish_and_clear(&mut self) {
-        if let Some(line) = self.line_for(self.total) {
-            eprintln!("{line}");
+        if let Some((_, speed)) = self.report_line(self.total) {
+            eprintln!("{}", progress_line_with_speed(&self.msg, self.total, self.total, speed));
         }
     }
 
     /// The line to print for `position`, if any: `None` until the position
     /// crosses another 5% step (or reaches the total). After `finish` every
     /// call is silent. Pure decision logic so the tests can pin the stepping
-    /// without capturing stderr.
+    /// without capturing stderr. Speed-free on purpose: the speed/ETA suffix
+    /// is appended by [`Self::report_line`]'s callers.
+    #[cfg(test)]
     fn line_for(&self, position: u64) -> Option<String> {
+        self.report_line(position).map(|(line, _)| line)
+    }
+
+    /// [`Self::line_for`] plus the transfer speed measured since the last
+    /// reported step (used by `set_position`/`finish_and_clear` to append
+    /// speed + ETA). `line_for` stays speed-free so the stepping tests pin
+    /// exact lines without timing flakiness.
+    fn report_line(&self, position: u64) -> Option<(String, Option<f64>)> {
         let mut state = self.state.lock().expect("plain progress state poisoned");
         if state.finished {
             return None;
@@ -152,8 +184,15 @@ impl PlainBar {
         let percent = position * 100 / self.total;
         let last_percent = state.last_reported * 100 / self.total;
         if position >= self.total || percent >= last_percent.saturating_add(PLAIN_STEP_PERCENT) {
+            let speed = state.last_at.and_then(|at| {
+                let elapsed = at.elapsed();
+                (elapsed > Duration::ZERO).then(|| {
+                    position.saturating_sub(state.last_reported) as f64 / elapsed.as_secs_f64()
+                })
+            });
             state.last_reported = position;
-            Some(progress_line(&self.msg, position, self.total))
+            state.last_at = Some(Instant::now());
+            Some((progress_line(&self.msg, position, self.total), speed))
         } else {
             None
         }
@@ -168,6 +207,29 @@ pub fn progress_line(msg: &str, position: u64, total: u64) -> String {
         .and_then(|n| n.checked_div(total))
         .unwrap_or(100);
     format!("{msg}: {} / {} ({percent}%)", human_bytes(position), human_bytes(total))
+}
+
+/// [`progress_line`] plus the measured transfer speed and a remaining-time
+/// estimate: `正在传输...: 45.2 MiB / 100 MiB (45%) · 12.5 MiB/s · ETA 4s`.
+/// The suffix is omitted when no measurement is available; ETA is omitted
+/// once the transfer is complete.
+pub fn progress_line_with_speed(
+    msg: &str,
+    position: u64,
+    total: u64,
+    bytes_per_sec: Option<f64>,
+) -> String {
+    let mut line = progress_line(msg, position, total);
+    if let Some(speed) = bytes_per_sec {
+        line.push_str(" · ");
+        line.push_str(&human_bytes(speed as u64));
+        line.push_str("/s");
+        if position < total && speed > 0.0 {
+            let remaining = (total - position) as f64 / speed;
+            line.push_str(&format!(" · ETA {}s", remaining.ceil() as u64));
+        }
+    }
+    line
 }
 
 /// Terminal UI handles for one send flow. Cheap to clone: the underlying
@@ -276,7 +338,7 @@ pub fn human_bytes(bytes: u64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{PlainBar, SendUi, UiBar, human_bytes, progress_line};
+    use super::{PlainBar, SendUi, UiBar, human_bytes, progress_line, progress_line_with_speed};
 
     #[test]
     fn human_bytes_formats_units() {
@@ -336,6 +398,25 @@ mod tests {
         );
         assert_eq!(progress_line("x", 0, 0), "x: 0 B / 0 B (100%)");
         assert_eq!(progress_line("x", 100, 100), "x: 100 B / 100 B (100%)");
+    }
+
+    #[test]
+    fn progress_line_with_speed_appends_speed_and_eta() {
+        // Speed + ETA suffix (remaining 950 B at 50 B/s = 19 s).
+        assert_eq!(
+            progress_line_with_speed("正在传输...", 50, 1000, Some(50.0)),
+            "正在传输...: 50 B / 1000 B (5%) · 50 B/s · ETA 19s"
+        );
+        // ETA is omitted once the transfer is complete.
+        assert_eq!(
+            progress_line_with_speed("x", 1000, 1000, Some(50.0)),
+            "x: 1000 B / 1000 B (100%) · 50 B/s"
+        );
+        // No measurement: identical to progress_line.
+        assert_eq!(
+            progress_line_with_speed("x", 100, 1000, None),
+            progress_line("x", 100, 1000)
+        );
     }
 
     #[test]
