@@ -30,7 +30,10 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/
+# T20: `/build` without the trailing slash also ignores the build-dir SYMLINK
+# (points to /data on the Metis M4 host; gitignore `/build/` only matches real
+# directories, so the symlink entry leaked as untracked).
+/build
 /coverage/
 
 # Symbolication related

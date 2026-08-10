@@ -1,5 +1,9 @@
 /// This is copied from Cargokit (which is the official way to use it currently)
 /// Details: https://fzyzcjy.github.io/flutter_rust_bridge/manual/integrate/builtin
+///
+/// T20 (my-croc): Gradle 9 removed Project.exec(Closure) - the original
+/// `project.exec { ... }` calls fail with "Could not find method exec()".
+/// Rewritten to the exec(Action) overload (drop-in, same ExecSpec config).
 
 import java.nio.file.Paths
 import org.apache.tools.ant.taskdefs.condition.Os
@@ -59,27 +63,39 @@ abstract class CargoKitBuildTask extends DefaultTask {
 
         def rootProjectDir = project.rootProject.projectDir
 
+        // T20 (my-croc): Gradle 9 removed Project.exec(Closure) and closure->Action
+        // coercion no longer works in its Groovy, so Project.exec is unusable here.
+        // ProcessBuilder is pure-Java and version-proof.
         if (!Os.isFamily(Os.FAMILY_WINDOWS)) {
-            project.exec {
-                commandLine 'chmod', '+x', path
+            def chmod = new ProcessBuilder(['chmod', '+x', path.toString()])
+            def chmodProc = chmod.start()
+            if (chmodProc.waitFor() != 0) {
+                throw new GradleException("Failed to chmod +x ${path}")
             }
         }
 
-        project.exec {
-            executable path
-            args "build-gradle"
-            environment "CARGOKIT_ROOT_PROJECT_DIR", rootProjectDir
-            environment "CARGOKIT_TOOL_TEMP_DIR", "${buildDir}/build_tool"
-            environment "CARGOKIT_MANIFEST_DIR", manifestDir
-            environment "CARGOKIT_CONFIGURATION", buildMode
-            environment "CARGOKIT_TARGET_TEMP_DIR", buildDir
-            environment "CARGOKIT_OUTPUT_DIR", outputDir
-            environment "CARGOKIT_NDK_VERSION", ndkVersion
-            environment "CARGOKIT_SDK_DIR", sdkDirectory
-            environment "CARGOKIT_COMPILE_SDK_VERSION", compileSdkVersion
-            environment "CARGOKIT_MIN_SDK_VERSION", minSdkVersion
-            environment "CARGOKIT_TARGET_PLATFORMS", targetPlatforms.join(",")
-            environment "CARGOKIT_JAVA_HOME", System.properties['java.home']
+        def processBuilder = new ProcessBuilder([path.toString(), 'build-gradle'])
+        // T20: inheritIO - with the default PIPE redirect the build_tool's
+        // stdout fills the unread pipe and the child blocks forever.
+        processBuilder.inheritIO()
+        processBuilder.environment().putAll([
+            'CARGOKIT_ROOT_PROJECT_DIR': rootProjectDir.toString(),
+            'CARGOKIT_TOOL_TEMP_DIR': "${buildDir}/build_tool".toString(),
+            'CARGOKIT_MANIFEST_DIR': manifestDir.toString(),
+            'CARGOKIT_CONFIGURATION': buildMode,
+            'CARGOKIT_TARGET_TEMP_DIR': buildDir,
+            'CARGOKIT_OUTPUT_DIR': outputDir,
+            'CARGOKIT_NDK_VERSION': ndkVersion,
+            'CARGOKIT_SDK_DIR': sdkDirectory,
+            'CARGOKIT_COMPILE_SDK_VERSION': compileSdkVersion.toString(),
+            'CARGOKIT_MIN_SDK_VERSION': minSdkVersion.toString(),
+            'CARGOKIT_TARGET_PLATFORMS': targetPlatforms.join(','),
+            'CARGOKIT_JAVA_HOME': System.properties['java.home'],
+        ])
+        def runProc = processBuilder.start()
+        def exitCode = runProc.waitFor()
+        if (exitCode != 0) {
+            throw new GradleException("cargokit build_tool exited with code ${exitCode} (see output above)")
         }
     }
 }

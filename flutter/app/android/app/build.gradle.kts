@@ -19,7 +19,9 @@ android {
         applicationId = "com.mycroc.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // T20: minSdk 26 override (Flutter default is 24) - my-croc requires
+        // Android 8.0+ (okhttp/rustls TLS baseline for the iroh relay transport).
+        minSdk = 26
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
