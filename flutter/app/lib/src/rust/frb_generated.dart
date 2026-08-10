@@ -3,8 +3,10 @@
 
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
+import 'api/config.dart';
 import 'api/events.dart';
 import 'api/hello.dart';
+import 'api/session.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'frb_generated.dart';
@@ -65,7 +67,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -2044824122;
+  int get rustContentHash => -38259594;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -77,14 +79,62 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  Future<void> crateApiSessionAcceptOffer({
+    required SessionHandle handle,
+    required String targetDir,
+  });
+
+  Future<BridgeEvent> crateApiEventsBridgeEventCancelled();
+
+  Future<BridgeEvent> crateApiEventsBridgeEventDone({
+    required BigInt bytes,
+    required BigInt files,
+  });
+
+  Future<void> crateApiSessionCancelSession({required SessionHandle handle});
+
+  Future<SessionHandle> crateApiSessionCreateSession({
+    required SessionRole role,
+  });
+
+  Future<void> crateApiSessionDeclineOffer({
+    required SessionHandle handle,
+    required String reason,
+  });
+
+  Future<void> crateApiSessionDisposeSession({required SessionHandle handle});
+
   Future<void> crateApiEventsEmitEvent({
     required String kind,
     required String message,
   });
 
+  Future<ConfigDto> crateApiConfigGetConfig();
+
   Future<String> crateApiHelloHello({required String name});
 
+  Future<OfferDto> crateApiSessionReceiveTicket({
+    required SessionHandle handle,
+    required String code,
+  });
+
+  Future<PreparedSendDto> crateApiSessionSendPaths({
+    required SessionHandle handle,
+    required List<String> paths,
+  });
+
+  Future<String> crateApiSessionSessionPhase({required SessionHandle handle});
+
+  Future<String> crateApiConfigSetConfig({
+    required String key,
+    required String value,
+  });
+
   Stream<BridgeEvent> crateApiEventsSubscribeEvents();
+
+  Stream<BridgeEvent> crateApiSessionWatchTransfer({
+    required SessionHandle handle,
+  });
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -94,6 +144,223 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required super.generalizedFrbRustBinding,
     required super.portManager,
   });
+
+  @override
+  Future<void> crateApiSessionAcceptOffer({
+    required SessionHandle handle,
+    required String targetDir,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_session_handle(handle, serializer);
+          sse_encode_String(targetDir, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSessionAcceptOfferConstMeta,
+        argValues: [handle, targetDir],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionAcceptOfferConstMeta => const TaskConstMeta(
+    debugName: "accept_offer",
+    argNames: ["handle", "targetDir"],
+  );
+
+  @override
+  Future<BridgeEvent> crateApiEventsBridgeEventCancelled() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 2,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bridge_event,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiEventsBridgeEventCancelledConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiEventsBridgeEventCancelledConstMeta =>
+      const TaskConstMeta(debugName: "bridge_event_cancelled", argNames: []);
+
+  @override
+  Future<BridgeEvent> crateApiEventsBridgeEventDone({
+    required BigInt bytes,
+    required BigInt files,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_64(bytes, serializer);
+          sse_encode_u_64(files, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bridge_event,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiEventsBridgeEventDoneConstMeta,
+        argValues: [bytes, files],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiEventsBridgeEventDoneConstMeta =>
+      const TaskConstMeta(
+        debugName: "bridge_event_done",
+        argNames: ["bytes", "files"],
+      );
+
+  @override
+  Future<void> crateApiSessionCancelSession({required SessionHandle handle}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_session_handle(handle, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 4,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSessionCancelSessionConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionCancelSessionConstMeta =>
+      const TaskConstMeta(debugName: "cancel_session", argNames: ["handle"]);
+
+  @override
+  Future<SessionHandle> crateApiSessionCreateSession({
+    required SessionRole role,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_session_role(role, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_session_handle,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSessionCreateSessionConstMeta,
+        argValues: [role],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionCreateSessionConstMeta =>
+      const TaskConstMeta(debugName: "create_session", argNames: ["role"]);
+
+  @override
+  Future<void> crateApiSessionDeclineOffer({
+    required SessionHandle handle,
+    required String reason,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_session_handle(handle, serializer);
+          sse_encode_String(reason, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSessionDeclineOfferConstMeta,
+        argValues: [handle, reason],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionDeclineOfferConstMeta =>
+      const TaskConstMeta(
+        debugName: "decline_offer",
+        argNames: ["handle", "reason"],
+      );
+
+  @override
+  Future<void> crateApiSessionDisposeSession({required SessionHandle handle}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_session_handle(handle, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 7,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSessionDisposeSessionConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionDisposeSessionConstMeta =>
+      const TaskConstMeta(debugName: "dispose_session", argNames: ["handle"]);
 
   @override
   Future<void> crateApiEventsEmitEvent({
@@ -109,7 +376,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 1,
+            funcId: 8,
             port: port_,
           );
         },
@@ -130,6 +397,33 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  Future<ConfigDto> crateApiConfigGetConfig() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_config_dto,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiConfigGetConfigConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiConfigGetConfigConstMeta =>
+      const TaskConstMeta(debugName: "get_config", argNames: []);
+
+  @override
   Future<String> crateApiHelloHello({required String name}) {
     return handler.executeNormal(
       NormalTask(
@@ -139,7 +433,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 2,
+            funcId: 10,
             port: port_,
           );
         },
@@ -158,6 +452,135 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "hello", argNames: ["name"]);
 
   @override
+  Future<OfferDto> crateApiSessionReceiveTicket({
+    required SessionHandle handle,
+    required String code,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_session_handle(handle, serializer);
+          sse_encode_String(code, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 11,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_offer_dto,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSessionReceiveTicketConstMeta,
+        argValues: [handle, code],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionReceiveTicketConstMeta =>
+      const TaskConstMeta(
+        debugName: "receive_ticket",
+        argNames: ["handle", "code"],
+      );
+
+  @override
+  Future<PreparedSendDto> crateApiSessionSendPaths({
+    required SessionHandle handle,
+    required List<String> paths,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_session_handle(handle, serializer);
+          sse_encode_list_String(paths, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 12,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_prepared_send_dto,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSessionSendPathsConstMeta,
+        argValues: [handle, paths],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionSendPathsConstMeta => const TaskConstMeta(
+    debugName: "send_paths",
+    argNames: ["handle", "paths"],
+  );
+
+  @override
+  Future<String> crateApiSessionSessionPhase({required SessionHandle handle}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_session_handle(handle, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 13,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiSessionSessionPhaseConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionSessionPhaseConstMeta =>
+      const TaskConstMeta(debugName: "session_phase", argNames: ["handle"]);
+
+  @override
+  Future<String> crateApiConfigSetConfig({
+    required String key,
+    required String value,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(key, serializer);
+          sse_encode_String(value, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 14,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiConfigSetConfigConstMeta,
+        argValues: [key, value],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiConfigSetConfigConstMeta =>
+      const TaskConstMeta(debugName: "set_config", argNames: ["key", "value"]);
+
+  @override
   Stream<BridgeEvent> crateApiEventsSubscribeEvents() {
     final updates = RustStreamSink<BridgeEvent>();
     unawaited(
@@ -169,7 +592,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 3,
+              funcId: 15,
               port: port_,
             );
           },
@@ -188,6 +611,44 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiEventsSubscribeEventsConstMeta =>
       const TaskConstMeta(debugName: "subscribe_events", argNames: ["updates"]);
+
+  @override
+  Stream<BridgeEvent> crateApiSessionWatchTransfer({
+    required SessionHandle handle,
+  }) {
+    final updates = RustStreamSink<BridgeEvent>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_box_autoadd_session_handle(handle, serializer);
+            sse_encode_StreamSink_bridge_event_Sse(updates, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 16,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_unit,
+            decodeErrorData: sse_decode_String,
+          ),
+          constMeta: kCrateApiSessionWatchTransferConstMeta,
+          argValues: [handle, updates],
+          apiImpl: this,
+        ),
+      ),
+    );
+    return updates.stream;
+  }
+
+  TaskConstMeta get kCrateApiSessionWatchTransferConstMeta =>
+      const TaskConstMeta(
+        debugName: "watch_transfer",
+        argNames: ["handle", "updates"],
+      );
 
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {
@@ -210,21 +671,148 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  bool dco_decode_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as bool;
+  }
+
+  @protected
+  SessionHandle dco_decode_box_autoadd_session_handle(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_session_handle(raw);
+  }
+
+  @protected
+  BigInt dco_decode_box_autoadd_u_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_u_64(raw);
+  }
+
+  @protected
   BridgeEvent dco_decode_bridge_event(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return BridgeEvent(
       kind: dco_decode_String(arr[0]),
-      message: dco_decode_String(arr[1]),
+      phase: dco_decode_opt_String(arr[1]),
+      message: dco_decode_opt_String(arr[2]),
+      name: dco_decode_opt_String(arr[3]),
+      received: dco_decode_opt_box_autoadd_u_64(arr[4]),
+      total: dco_decode_opt_box_autoadd_u_64(arr[5]),
+      bytes: dco_decode_opt_box_autoadd_u_64(arr[6]),
+      files: dco_decode_opt_box_autoadd_u_64(arr[7]),
     );
+  }
+
+  @protected
+  ConfigDto dco_decode_config_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return ConfigDto(
+      rendezvousUrl: dco_decode_String(arr[0]),
+      relayUrl: dco_decode_String(arr[1]),
+      dataDir: dco_decode_String(arr[2]),
+      overwrite: dco_decode_bool(arr[3]),
+    );
+  }
+
+  @protected
+  FileMetaDto dco_decode_file_meta_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return FileMetaDto(
+      name: dco_decode_String(arr[0]),
+      size: dco_decode_u_64(arr[1]),
+      hash: dco_decode_String(arr[2]),
+    );
+  }
+
+  @protected
+  int dco_decode_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
+  List<String> dco_decode_list_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_String).toList();
+  }
+
+  @protected
+  List<FileMetaDto> dco_decode_list_file_meta_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_file_meta_dto).toList();
   }
 
   @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as Uint8List;
+  }
+
+  @protected
+  OfferDto dco_decode_offer_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return OfferDto(
+      files: dco_decode_list_file_meta_dto(arr[0]),
+      totalBytes: dco_decode_u_64(arr[1]),
+    );
+  }
+
+  @protected
+  String? dco_decode_opt_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  BigInt? dco_decode_opt_box_autoadd_u_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_u_64(raw);
+  }
+
+  @protected
+  PreparedSendDto dco_decode_prepared_send_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return PreparedSendDto(
+      code: dco_decode_String(arr[0]),
+      files: dco_decode_list_file_meta_dto(arr[1]),
+      totalBytes: dco_decode_u_64(arr[2]),
+    );
+  }
+
+  @protected
+  SessionHandle dco_decode_session_handle(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 1)
+      throw Exception('unexpected arr length: expect 1 but see ${arr.length}');
+    return SessionHandle(id: dco_decode_u_64(arr[0]));
+  }
+
+  @protected
+  SessionRole dco_decode_session_role(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return SessionRole.values[raw as int];
+  }
+
+  @protected
+  BigInt dco_decode_u_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeU64(raw);
   }
 
   @protected
@@ -262,11 +850,102 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  bool sse_decode_bool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint8() != 0;
+  }
+
+  @protected
+  SessionHandle sse_decode_box_autoadd_session_handle(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_session_handle(deserializer));
+  }
+
+  @protected
+  BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_u_64(deserializer));
+  }
+
+  @protected
   BridgeEvent sse_decode_bridge_event(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_kind = sse_decode_String(deserializer);
-    var var_message = sse_decode_String(deserializer);
-    return BridgeEvent(kind: var_kind, message: var_message);
+    var var_phase = sse_decode_opt_String(deserializer);
+    var var_message = sse_decode_opt_String(deserializer);
+    var var_name = sse_decode_opt_String(deserializer);
+    var var_received = sse_decode_opt_box_autoadd_u_64(deserializer);
+    var var_total = sse_decode_opt_box_autoadd_u_64(deserializer);
+    var var_bytes = sse_decode_opt_box_autoadd_u_64(deserializer);
+    var var_files = sse_decode_opt_box_autoadd_u_64(deserializer);
+    return BridgeEvent(
+      kind: var_kind,
+      phase: var_phase,
+      message: var_message,
+      name: var_name,
+      received: var_received,
+      total: var_total,
+      bytes: var_bytes,
+      files: var_files,
+    );
+  }
+
+  @protected
+  ConfigDto sse_decode_config_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_rendezvousUrl = sse_decode_String(deserializer);
+    var var_relayUrl = sse_decode_String(deserializer);
+    var var_dataDir = sse_decode_String(deserializer);
+    var var_overwrite = sse_decode_bool(deserializer);
+    return ConfigDto(
+      rendezvousUrl: var_rendezvousUrl,
+      relayUrl: var_relayUrl,
+      dataDir: var_dataDir,
+      overwrite: var_overwrite,
+    );
+  }
+
+  @protected
+  FileMetaDto sse_decode_file_meta_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_name = sse_decode_String(deserializer);
+    var var_size = sse_decode_u_64(deserializer);
+    var var_hash = sse_decode_String(deserializer);
+    return FileMetaDto(name: var_name, size: var_size, hash: var_hash);
+  }
+
+  @protected
+  int sse_decode_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getInt32();
+  }
+
+  @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <String>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_String(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<FileMetaDto> sse_decode_list_file_meta_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <FileMetaDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_file_meta_dto(deserializer));
+    }
+    return ans_;
   }
 
   @protected
@@ -274,6 +953,69 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var len_ = sse_decode_i_32(deserializer);
     return deserializer.buffer.getUint8List(len_);
+  }
+
+  @protected
+  OfferDto sse_decode_offer_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_files = sse_decode_list_file_meta_dto(deserializer);
+    var var_totalBytes = sse_decode_u_64(deserializer);
+    return OfferDto(files: var_files, totalBytes: var_totalBytes);
+  }
+
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_String(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  BigInt? sse_decode_opt_box_autoadd_u_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_u_64(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  PreparedSendDto sse_decode_prepared_send_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_code = sse_decode_String(deserializer);
+    var var_files = sse_decode_list_file_meta_dto(deserializer);
+    var var_totalBytes = sse_decode_u_64(deserializer);
+    return PreparedSendDto(
+      code: var_code,
+      files: var_files,
+      totalBytes: var_totalBytes,
+    );
+  }
+
+  @protected
+  SessionHandle sse_decode_session_handle(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_u_64(deserializer);
+    return SessionHandle(id: var_id);
+  }
+
+  @protected
+  SessionRole sse_decode_session_role(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return SessionRole.values[inner];
+  }
+
+  @protected
+  BigInt sse_decode_u_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getBigUint64();
   }
 
   @protected
@@ -285,18 +1027,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   void sse_decode_unit(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-  }
-
-  @protected
-  int sse_decode_i_32(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getInt32();
-  }
-
-  @protected
-  bool sse_decode_bool(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getUint8() != 0;
   }
 
   @protected
@@ -332,10 +1062,81 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_bool(bool self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint8(self ? 1 : 0);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_session_handle(
+    SessionHandle self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_session_handle(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self, serializer);
+  }
+
+  @protected
   void sse_encode_bridge_event(BridgeEvent self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.kind, serializer);
-    sse_encode_String(self.message, serializer);
+    sse_encode_opt_String(self.phase, serializer);
+    sse_encode_opt_String(self.message, serializer);
+    sse_encode_opt_String(self.name, serializer);
+    sse_encode_opt_box_autoadd_u_64(self.received, serializer);
+    sse_encode_opt_box_autoadd_u_64(self.total, serializer);
+    sse_encode_opt_box_autoadd_u_64(self.bytes, serializer);
+    sse_encode_opt_box_autoadd_u_64(self.files, serializer);
+  }
+
+  @protected
+  void sse_encode_config_dto(ConfigDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.rendezvousUrl, serializer);
+    sse_encode_String(self.relayUrl, serializer);
+    sse_encode_String(self.dataDir, serializer);
+    sse_encode_bool(self.overwrite, serializer);
+  }
+
+  @protected
+  void sse_encode_file_meta_dto(FileMetaDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.name, serializer);
+    sse_encode_u_64(self.size, serializer);
+    sse_encode_String(self.hash, serializer);
+  }
+
+  @protected
+  void sse_encode_i_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putInt32(self);
+  }
+
+  @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_String(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_file_meta_dto(
+    List<FileMetaDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_file_meta_dto(item, serializer);
+    }
   }
 
   @protected
@@ -349,6 +1150,62 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_offer_dto(OfferDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_file_meta_dto(self.files, serializer);
+    sse_encode_u_64(self.totalBytes, serializer);
+  }
+
+  @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_String(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_64(BigInt? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_u_64(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_prepared_send_dto(
+    PreparedSendDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.code, serializer);
+    sse_encode_list_file_meta_dto(self.files, serializer);
+    sse_encode_u_64(self.totalBytes, serializer);
+  }
+
+  @protected
+  void sse_encode_session_handle(SessionHandle self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.id, serializer);
+  }
+
+  @protected
+  void sse_encode_session_role(SessionRole self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_u_64(BigInt self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putBigUint64(self);
+  }
+
+  @protected
   void sse_encode_u_8(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putUint8(self);
@@ -357,17 +1214,5 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   void sse_encode_unit(void self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-  }
-
-  @protected
-  void sse_encode_i_32(int self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putInt32(self);
-  }
-
-  @protected
-  void sse_encode_bool(bool self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putUint8(self ? 1 : 0);
   }
 }

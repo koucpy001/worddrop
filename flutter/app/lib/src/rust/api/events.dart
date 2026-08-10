@@ -6,28 +6,76 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `event_rx`
+// These functions are ignored because they are not marked as `pub`: `empty`, `fan_out`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`
+// These functions have error during generation (see debug logs or enable `stop_on_error: true` for more details): `error`, `info`, `phase`, `progress`
 
-/// Subscribe to the bridge event stream. The returned stream is kept open
-/// (and fanned) until the Dart side cancels it.
+/// Subscribe to the global event stream. Kept open (and fanned) until the
+/// Dart side cancels it.
 Stream<BridgeEvent> subscribeEvents() =>
     RustLib.instance.api.crateApiEventsSubscribeEvents();
 
-/// Debug/test helper: push an event onto the bus (T17's real events fan in
-/// from core channels instead).
+/// Debug/test helper: push an event onto the global bus.
 Future<void> emitEvent({required String kind, required String message}) =>
     RustLib.instance.api.crateApiEventsEmitEvent(kind: kind, message: message);
 
-/// Bridge-level event DTO (skeleton: kind + message; T17 adds typed payloads).
+/// One event on a transfer stream. `kind` selects the shape; the optional
+/// payload fields carry that kind's values.
+///
+/// Kinds emitted by the session flows (api/session.rs):
+/// - "phase"         {phase}: session state machine advanced
+/// - "info"          {message}: noteworthy step (paired, declined, ...)
+/// - "file_found"    {name, total}: sender preparing, a file's size known
+/// - "file_imported" {name}: sender preparing, a file stored
+/// - "connecting"    {}: receiver dialing the sender
+/// - "downloading"   {received, total}: receiver payload progress
+/// - "exporting"     {name}: receiver writing a file to disk
+/// - "served"        {received, total}: sender-side bytes served
+/// - "done"          {bytes, files}: transfer finished successfully
+/// - "error"         {message}: the flow failed
+/// - "test"          {message}: debug bus only (T16 `emitEvent` helper)
 class BridgeEvent {
   final String kind;
-  final String message;
+  final String? phase;
+  final String? message;
+  final String? name;
+  final BigInt? received;
+  final BigInt? total;
+  final BigInt? bytes;
+  final BigInt? files;
 
-  const BridgeEvent({required this.kind, required this.message});
+  const BridgeEvent({
+    required this.kind,
+    this.phase,
+    this.message,
+    this.name,
+    this.received,
+    this.total,
+    this.bytes,
+    this.files,
+  });
+
+  static Future<BridgeEvent> cancelled() =>
+      RustLib.instance.api.crateApiEventsBridgeEventCancelled();
+
+  static Future<BridgeEvent> done({
+    required BigInt bytes,
+    required BigInt files,
+  }) => RustLib.instance.api.crateApiEventsBridgeEventDone(
+    bytes: bytes,
+    files: files,
+  );
 
   @override
-  int get hashCode => kind.hashCode ^ message.hashCode;
+  int get hashCode =>
+      kind.hashCode ^
+      phase.hashCode ^
+      message.hashCode ^
+      name.hashCode ^
+      received.hashCode ^
+      total.hashCode ^
+      bytes.hashCode ^
+      files.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -35,5 +83,11 @@ class BridgeEvent {
       other is BridgeEvent &&
           runtimeType == other.runtimeType &&
           kind == other.kind &&
-          message == other.message;
+          phase == other.phase &&
+          message == other.message &&
+          name == other.name &&
+          received == other.received &&
+          total == other.total &&
+          bytes == other.bytes &&
+          files == other.files;
 }
