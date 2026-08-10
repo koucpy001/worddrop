@@ -11,6 +11,7 @@
 
 use std::fmt;
 use std::future::Future;
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
@@ -31,6 +32,7 @@ use my_croc_core::transfer::receive::{ReceiveError, ReceiveOptions, ReceiveProgr
 use my_croc_core::transfer::record::RecordStore;
 
 use crate::rendezvous_client::{RvClient, RvError};
+use crate::ui::{PlainBar, UiBar};
 use crate::wire::{self, CONTROL_ALPN, PAIR_TIMEOUT};
 
 /// How long to wait for the user offer prompt.
@@ -259,7 +261,9 @@ where
     .await?;
 
     // Wait for relay contact before dialing (only when a relay is configured).
+    // Restricted networks can stall this up to 15 s — announce it up front.
     if relay_enabled {
+        eprintln!("正在连接中继服务器...");
         tokio::time::timeout(Duration::from_secs(15), engine.endpoint().online())
             .await
             .map_err(|_| RecvError::RelayHung)?;
@@ -307,7 +311,7 @@ where
     })?;
 
     // 5. Dial the sender on the control ALPN.
-    let connecting = spinner("正在连接发送方...");
+    let mut connecting = spinner("正在连接发送方...");
     let conn = tokio::select! {
         biased;
         _ = &mut *interrupt => {
@@ -339,7 +343,7 @@ where
     let _ = recv_message_timeout(&mut recv, HANDSHAKE_TIMEOUT, "sender hello").await?;
 
     // 7. SPAKE2 pairing with the words as password (F1: words used here only).
-    let pairing = spinner("正在配对...");
+    let mut pairing = spinner("正在配对...");
     let spake_result = tokio::select! {
         biased;
         _ = &mut *interrupt => {
@@ -424,8 +428,8 @@ where
     // Check for resume record.
     let resume = check_resume(data_dir, &ticket, &output).await;
 
-    let bar = progress_bar(total_bytes);
-    let bar_for_cb = bar.clone();
+    let mut bar = progress_bar(total_bytes);
+    let mut bar_for_cb = bar.clone();
     let mut progress_cb = move |ev: ReceiveProgress| {
         if let ReceiveProgress::Downloading { received, total } = ev {
             let clamped = received.min(total);
@@ -470,11 +474,6 @@ where
                 .await?;
                 wire::await_peer_close(&mut recv, "sender to close after result").await?;
                 session.transition(Transition::Completed).await?;
-                eprintln!(
-                    "传输完成：{} 个文件，{}",
-                    result.files,
-                    crate::ui::human_bytes(result.bytes)
-                );
                 Ok(ReceiveOutcome::Completed {
                     bytes: result.bytes,
                     files: result.files,
@@ -503,6 +502,9 @@ async fn check_resume(
     eprint!("继续上次传输? [y/N] ");
     match read_line_timeout(PROMPT_TIMEOUT).await {
         Ok(Some(line)) => {
+            if !std::io::stderr().is_terminal() {
+                eprintln!();
+            }
             let trimmed = line.trim().to_lowercase();
             trimmed == "y" || trimmed == "yes"
         }
@@ -534,6 +536,11 @@ async fn prompt_accept() -> Result<bool, RecvError> {
     );
     match read_line_timeout(PROMPT_TIMEOUT).await {
         Ok(Some(line)) => {
+            // Piped stdin (agents): close the prompt line so the next plain
+            // progress line does not run into it.
+            if !std::io::stderr().is_terminal() {
+                eprintln!();
+            }
             let trimmed = line.trim().to_lowercase();
             Ok(trimmed == "y" || trimmed == "yes")
         }
@@ -558,19 +565,28 @@ async fn read_line_timeout(timeout: Duration) -> Result<Option<String>, RecvErro
     }
 }
 
-/// Create a spinner (indicatif ProgressBar with braille spinner style).
-fn spinner(msg: &str) -> ProgressBar {
-    let bar = ProgressBar::new_spinner();
-    bar.set_style(spinner_style());
-    bar.set_message(msg.to_string());
-    bar.enable_steady_tick(Duration::from_millis(80));
-    bar
+/// Create a state element (spinner): indicatif when stderr is a terminal,
+/// a plain one-shot line otherwise (indicatif hides everything non-TTY).
+fn spinner(msg: &str) -> UiBar {
+    if std::io::stderr().is_terminal() {
+        let bar = ProgressBar::new_spinner();
+        bar.set_style(spinner_style());
+        bar.set_message(msg.to_string());
+        bar.enable_steady_tick(Duration::from_millis(80));
+        UiBar::Tty(bar)
+    } else {
+        UiBar::Plain(PlainBar::state(msg))
+    }
 }
 
-/// Create a progress bar for the transfer phase.
-fn progress_bar(total_bytes: u64) -> ProgressBar {
-    let bar = ProgressBar::new(total_bytes);
-    bar.set_style(bar_style());
-    bar.set_message("正在传输...".to_string());
-    bar
+/// Create a transfer progress bar (tty-aware, same fallback as [`spinner`]).
+fn progress_bar(total_bytes: u64) -> UiBar {
+    if std::io::stderr().is_terminal() {
+        let bar = ProgressBar::new(total_bytes);
+        bar.set_style(bar_style());
+        bar.set_message("正在传输...".to_string());
+        UiBar::Tty(bar)
+    } else {
+        UiBar::Plain(PlainBar::transfer("正在传输...", total_bytes))
+    }
 }

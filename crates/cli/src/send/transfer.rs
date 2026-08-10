@@ -39,7 +39,7 @@ where
 {
     let TransferContext { session, engine, ui, total, file_count } = ctx;
     let served_baseline = engine.served_bytes();
-    let bar = ui.transfer_bar(total);
+    let mut bar = ui.transfer_bar(total);
     let mut tick = tokio::time::interval(Duration::from_millis(100));
     loop {
         tokio::select! {

@@ -25,9 +25,9 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Send files or directories (command logic lands in T13).
+    /// Send files or directories with word-code pairing.
     Send(SendArgs),
-    /// Receive files with a word code (command logic lands in T14).
+    /// Receive files by entering the pairing word code.
     Receive(ReceiveArgs),
     /// Show or modify the configuration file.
     Config(ConfigArgs),

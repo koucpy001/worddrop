@@ -1,8 +1,7 @@
 //! my-croc-cli — Linux CLI binary crate.
 //!
 //! Command surface (clap, T12), TOML config file with env/default merge,
-//! unified error-to-exit-code mapping. Send/receive command logic lands in
-//! T13/T14.
+//! unified error-to-exit-code mapping, and the send/receive command flows.
 
 pub mod cli;
 pub mod commands;

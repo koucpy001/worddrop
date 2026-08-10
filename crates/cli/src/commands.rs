@@ -67,10 +67,16 @@ async fn send_async(args: SendArgs) -> Result<String, CliError> {
 
     // The ticket must carry the relay URL: wait for relay contact before
     // preparing the transfer (T11 learning: `online()` after bind).
+    // Restricted networks can stall this up to 15 s — announce it up front
+    // and name the relay on failure.
+    eprintln!("正在连接中继服务器... (relay {})", config.relay_url);
     timeout(Duration::from_secs(15), engine.endpoint().online())
         .await
         .map_err(|_| {
-            CliError::runtime(format!("timed out contacting relay {}", config.relay_url))
+            CliError::runtime(format!(
+                "timed out contacting relay server {} after 15s",
+                config.relay_url
+            ))
         })?;
 
     let ui = SendUi::new();

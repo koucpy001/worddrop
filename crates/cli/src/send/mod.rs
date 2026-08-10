@@ -198,7 +198,7 @@ where
     session.transition(Transition::StartPairing).await?;
 
     // 1. Walk + import + collection + ticket.
-    let preparing = ui.preparing();
+    let mut preparing = ui.preparing();
     let mut progress: Box<dyn FnMut(ProgressEvent) + Send> = Box::new(|_| {});
     let prepared = engine.prepare_send(paths, progress.as_mut()).await?;
     preparing.finish_and_clear();
@@ -217,7 +217,7 @@ where
 
     // 4. Display the code and wait for the receiver's control connection.
     ui.show_code(&code.to_string());
-    let waiting = ui.waiting_pair();
+    let mut waiting = ui.waiting_pair();
     let conn_fut = tokio::time::timeout(PAIR_TIMEOUT, control_rx.recv());
     let conn = tokio::select! {
         biased;
@@ -254,7 +254,7 @@ where
         total_bytes: total,
     };
     send_message(&mut send, &offer).await?;
-    let accept_spinner = ui.waiting_accept();
+    let mut accept_spinner = ui.waiting_accept();
     let response = tokio::select! {
         biased;
         _ = &mut *interrupt => {
