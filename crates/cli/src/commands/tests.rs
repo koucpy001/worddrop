@@ -1,15 +1,18 @@
-//! Command dispatch tests (T12): `config set`/`get` roundtrip, error paths,
-//! and the send/receive stub output.
+//! Command dispatch tests (T12 + T14): `config set`/`get` roundtrip, error
+//! paths, and receive-code split + error mapping.
 
-use std::{fs, path::PathBuf};
+use std::{error::Error, fs, path::PathBuf};
 
 use my_croc_core::identity;
+use my_croc_core::pairing::spake::SpakeError;
+use my_croc_core::pairing::wordcode::WordCode;
 
 use crate::{
-    cli::{Cli, Commands, ConfigArgs, ConfigCommands, GetArgs, ReceiveArgs, SendArgs, SetArgs},
+    cli::{Cli, Commands, ConfigArgs, ConfigCommands, GetArgs, SetArgs},
     commands,
     config::{ConfigFile, ENV_LOCK, CONFIG_FILE},
     error::CliError,
+    receive::RecvError,
 };
 
 fn temp_config_dir(name: &str) -> PathBuf {
@@ -126,21 +129,70 @@ fn config_invalid_toml_surfaces_as_user_error() {
 }
 
 #[test]
-fn send_stub_reports_paths() {
-    let out = commands::run(cli_with(Commands::Send(SendArgs {
-        paths: vec![PathBuf::from("a.txt"), PathBuf::from("b.txt")],
-    })));
-    assert_eq!(out.expect("ok"), "send: 2 path(s): a.txt, b.txt\n");
+fn receive_code_split_valid_and_invalid() {
+    // split() splits on the first '-' only — the security seam that separates
+    // the nameplate from the words. It validates the nameplate but NOT the
+    // word count (full validation is WordCode::validate).
+    let (n, w) = WordCode::split("7-correct-horse-battery").expect("valid code splits");
+    assert_eq!(n, 7);
+    assert_eq!(w, "correct-horse-battery");
+
+    // split() accepts a single word after the nameplate — it returns words
+    // verbatim (the security boundary; full validation is later).
+    let (n, w) = WordCode::split("7-correct").expect("split single word");
+    assert_eq!(n, 7);
+    assert_eq!(w, "correct");
+
+    // Missing hyphen fails.
+    assert!(WordCode::split("not-a-code").is_err());
+
+    // Empty words portion fails.
+    assert!(WordCode::split("7-").is_err());
+
+    // Non-numeric nameplate fails.
+    assert!(WordCode::split("abc-words").is_err());
 }
 
 #[test]
-fn receive_stub_reports_args() {
-    let out = commands::run(cli_with(Commands::Receive(ReceiveArgs {
-        code: Some("7-correct-horse-battery".to_string()),
-        output: Some(PathBuf::from("dl")),
-    })));
-    assert_eq!(
-        out.expect("ok"),
-        "receive: code = 7-correct-horse-battery, output = dl\n"
+fn recv_error_user_vs_runtime_mapping() {
+    // Word-code and wrong-words failures are user errors (exit 1).
+    let user_err = RecvError::NoCode;
+    let cli: CliError = user_err.into();
+    assert!(
+        matches!(cli, CliError::User(_)),
+        "no-code should be user error, got {cli:?}"
     );
+
+    let user_err = RecvError::Pair(crate::wire::PairError::Spake(SpakeError::ConfirmationMismatch));
+    let cli: CliError = user_err.into();
+    assert!(
+        matches!(cli, CliError::User(_)),
+        "wrong-words should be user error, got {cli:?}"
+    );
+
+    // Runtime errors map to exit 2.
+    let runtime_err = RecvError::RelayHung;
+    let cli: CliError = runtime_err.into();
+    assert!(
+        matches!(cli, CliError::Runtime(_)),
+        "relay-hung should be runtime error, got {cli:?}"
+    );
+
+    let runtime_err = RecvError::Hung("something");
+    let cli: CliError = runtime_err.into();
+    assert!(
+        matches!(cli, CliError::Runtime(_)),
+        "hung should be runtime error, got {cli:?}"
+    );
+}
+
+#[test]
+fn recv_error_display_and_source() {
+    let err = RecvError::Ticket("bad".to_string());
+    assert!(err.to_string().contains("invalid ticket"));
+    assert!(err.source().is_none());
+
+    let err = RecvError::Word(WordCode::split("bad").unwrap_err());
+    assert!(err.to_string().contains("word-code error"));
+    assert!(err.source().is_some());
 }

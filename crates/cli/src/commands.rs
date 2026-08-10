@@ -1,10 +1,25 @@
-//! Subcommand dispatch. `config` is fully functional (T12 scope); `send` and
-//! `receive` are argument-reporting stubs until T13/T14 wire the real flows.
+//! Subcommand dispatch. `send` runs the full T13 flow; `config` is fully
+//! functional (T12); `receive` is an argument-reporting stub until T14.
+
+use std::str::FromStr;
+use std::time::Duration;
+
+use tokio::sync::mpsc;
+use tokio::time::timeout;
+
+use iroh::{RelayMode, RelayUrl};
+
+use my_croc_core::identity::Identity;
+use my_croc_core::transfer::engine::{EngineSpec, TransferEngine};
 
 use crate::{
     cli::{Cli, Commands, ConfigArgs, ConfigCommands, ReceiveArgs, SendArgs},
     config::{Config, ConfigFile},
     error::CliError,
+    rendezvous_client::RvClient,
+    send::{SendOutcome, run_send},
+    ui::{SendUi, human_bytes},
+    wire::{CONTROL_ALPN, ControlAcceptor, FLOW_TIMEOUT},
 };
 
 #[cfg(test)]
@@ -19,29 +34,128 @@ pub fn run(args: Cli) -> Result<String, CliError> {
     }
 }
 
-/// Stub: report the parsed send arguments. The real flow (file walk + import,
-/// rendezvous nameplate allocation, SPAKE2 pairing, iroh transfer) lands in T13.
+/// `my-croc send <paths...>`: prepare, allocate a nameplate, pair with
+/// SPAKE2 (words only), transfer with a progress bar, cancel on Ctrl+C.
 fn send(args: SendArgs) -> Result<String, CliError> {
-    let paths = args
-        .paths
-        .iter()
-        .map(|p| p.display().to_string())
-        .collect::<Vec<_>>()
-        .join(", ");
-    Ok(format!("send: {} path(s): {paths}\n", args.paths.len()))
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|source| CliError::runtime(format!("failed to start async runtime: {source}")))?;
+    runtime.block_on(send_async(args))
 }
 
-/// Stub: report the parsed receive arguments. The real flow (code split,
-/// rendezvous claim, SPAKE2 pairing, offer confirm, download + export) lands
-/// in T14.
+async fn send_async(args: SendArgs) -> Result<String, CliError> {
+    let config = Config::load()?;
+    let config_dir = my_croc_core::identity::Config::config_dir()?;
+    let identity = Identity::load_or_create(&config_dir)?;
+
+    // The sender must accept pairing control streams on its own ALPN: the
+    // engine's router registers the acceptor at bind time.
+    let (control_tx, control_rx) = mpsc::unbounded_channel();
+    let acceptor: Box<dyn iroh::protocol::DynProtocolHandler> =
+        ControlAcceptor::new(control_tx).into();
+    let relay_url = RelayUrl::from_str(&config.relay_url).map_err(|source| {
+        CliError::runtime(format!("invalid relay URL {:?}: {source}", config.relay_url))
+    })?;
+    let engine = TransferEngine::new_spec(EngineSpec {
+        data_dir: &config.data_dir,
+        relay_mode: RelayMode::Custom(relay_url.into()),
+        secret_key: Some(identity.secret_key()),
+        extra_handler: Some((CONTROL_ALPN.to_vec(), acceptor)),
+        track_served_bytes: true,
+    })
+    .await
+    .map_err(|source| CliError::runtime(format!("failed to start transfer engine: {source}")))?;
+
+    // The ticket must carry the relay URL: wait for relay contact before
+    // preparing the transfer (T11 learning: `online()` after bind).
+    timeout(Duration::from_secs(15), engine.endpoint().online())
+        .await
+        .map_err(|_| {
+            CliError::runtime(format!("timed out contacting relay {}", config.relay_url))
+        })?;
+
+    let ui = SendUi::new();
+    let interrupt = Box::pin(async {
+        let _ = tokio::signal::ctrl_c().await;
+    });
+    let outcome = timeout(
+        FLOW_TIMEOUT,
+        run_send(
+            engine,
+            control_rx,
+            RvClient::new(&config.rendezvous_url),
+            args.paths,
+            ui.clone(),
+            interrupt,
+            None,
+        ),
+    )
+    .await
+    .map_err(|_| {
+        CliError::runtime(format!(
+            "flow exceeded the {}s limit",
+            FLOW_TIMEOUT.as_secs()
+        ))
+    })??;
+
+    let summary = match outcome {
+        SendOutcome::Completed { bytes, files } => {
+            format!("传输完成：{files} 个文件，{}\n", human_bytes(bytes))
+        }
+        SendOutcome::Declined { reason } => format!("接收方已拒绝：{reason}\n"),
+        SendOutcome::Cancelled => "已取消\n".to_string(),
+    };
+    Ok(summary)
+}
+
+/// `my-croc receive [--code CODE] [--output DIR]`: split the typed code into
+/// nameplate + words (F1: words never leave the client), claim the NAME-plate
+/// only via rendezvous, on pending → dial sender via ticket, SPAKE2 with the
+/// WORDS as password, receive Offer → prompt accept/decline (interactive,
+/// default no after 60s), on accept → download + export with progress.
 fn receive(args: ReceiveArgs) -> Result<String, CliError> {
-    let code = args.code.as_deref().unwrap_or("<prompt>");
-    let output = args
-        .output
-        .as_deref()
-        .map(|p| p.display().to_string())
-        .unwrap_or_else(|| "<cwd>".to_string());
-    Ok(format!("receive: code = {code}, output = {output}\n"))
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|source| CliError::runtime(format!("failed to start async runtime: {source}")))?;
+    runtime.block_on(receive_async(args))
+}
+
+async fn receive_async(args: ReceiveArgs) -> Result<String, CliError> {
+    let config = Config::load()?;
+    let interrupt = Box::pin(async {
+        let _ = tokio::signal::ctrl_c().await;
+    });
+    let relay_url = RelayUrl::from_str(&config.relay_url)
+        .map_err(|source| CliError::runtime(format!("invalid relay URL {:?}: {}", config.relay_url, source)))?;
+    let outcome = tokio::time::timeout(
+        FLOW_TIMEOUT,
+        crate::receive::run_receive(
+            args.code,
+            crate::receive::ReceiveOpts {
+                output: args.output,
+                data_dir: config.data_dir,
+                rendezvous_url: config.rendezvous_url.clone(),
+                relay_mode: RelayMode::Custom(relay_url.into()),
+                overwrite: config.overwrite,
+                auto_accept: None, // interactive prompt
+            },
+            interrupt,
+        ),
+    )
+    .await
+    .map_err(|_| {
+        CliError::runtime(format!(
+            "flow exceeded the {}s limit",
+            FLOW_TIMEOUT.as_secs()
+        ))
+    })??;
+
+    let summary = match outcome {
+        crate::receive::ReceiveOutcome::Completed { bytes, files } => {
+            format!("传输完成：{files} 个文件，{}\n", human_bytes(bytes))
+        }
+        crate::receive::ReceiveOutcome::Declined => "已拒绝\n".to_string(),
+        crate::receive::ReceiveOutcome::Cancelled => "已取消\n".to_string(),
+    };
+    Ok(summary)
 }
 
 fn config(args: ConfigArgs) -> Result<String, CliError> {

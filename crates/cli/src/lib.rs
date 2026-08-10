@@ -8,6 +8,11 @@ pub mod cli;
 pub mod commands;
 pub mod config;
 pub mod error;
+pub mod receive;
+pub mod rendezvous_client;
+pub mod send;
+pub mod ui;
+pub mod wire;
 
 pub fn crate_version() -> &'static str {
     env!("CARGO_PKG_VERSION")

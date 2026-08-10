@@ -60,3 +60,39 @@ impl From<identity::Error> for CliError {
         CliError::User(err.to_string())
     }
 }
+
+impl From<crate::send::SendError> for CliError {
+    fn from(err: crate::send::SendError) -> CliError {
+        match err {
+            // Bad input paths / import failures are the user's fault (exit 1).
+            crate::send::SendError::Prepare(err) => CliError::user(err.to_string()),
+            // Network, rendezvous, pairing, and protocol failures are runtime
+            // errors (exit 2).
+            other => CliError::runtime(other.to_string()),
+        }
+    }
+}
+
+impl From<crate::receive::RecvError> for CliError {
+    fn from(err: crate::receive::RecvError) -> CliError {
+        match err {
+            // Bad code format -> user error (exit 1).
+            crate::receive::RecvError::Word(_) | crate::receive::RecvError::NoCode => {
+                CliError::user(err.to_string())
+            }
+            // Wrong words (SPAKE2 mismatch) -> user error (exit 1).
+            crate::receive::RecvError::Pair(ref wire_err)
+                if matches!(
+                    wire_err,
+                    crate::wire::PairError::Spake(
+                        my_croc_core::pairing::spake::SpakeError::ConfirmationMismatch,
+                    )
+                ) =>
+            {
+                CliError::user(err.to_string())
+            }
+            // Everything else is runtime (exit 2).
+            ref _other => CliError::runtime(err.to_string()),
+        }
+    }
+}

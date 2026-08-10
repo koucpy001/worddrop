@@ -23,3 +23,29 @@ toml = "1"
 serde = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# T13: async send flow (tokio runtime, mpsc control-acceptor channel, ctrl_c
+# signal). tokio "full" already pins signal/macros/rt via the workspace.
+tokio = { workspace = true }
+# T13: pairing-code generation (same rand 0.9 as core, already in the lockfile).
+rand = "0.9"
+# T13: iroh types the flow needs directly (Connection, RelayMode/RelayUrl for
+# the engine spec, ProtocolHandler for the CONTROL_ALPN acceptor). Already in
+# the lockfile via core — only the dep edge is added.
+iroh = { workspace = true }
+# T13: rendezvous request/response JSON (workspace dep, no new versions).
+serde_json = { workspace = true }
+# T13: spinner + bytes/ETA transfer progress bar (plan-mandated; the plan's
+# croc-style progress UI needs a terminal progress library).
+indicatif = "0.18"
+# T14: the receive flow parses the claimed ticket as a BlobTicket.
+iroh-blobs = { workspace = true }
+
+[dev-dependencies]
+# T13 tests: spawn the REAL T6 rendezvous server in-process on an ephemeral
+# port, so the CLI's rendezvous client is tested against the shipped server
+# (same dev-dep pattern as crates/core/tests/e2e.rs).
+my-croc-rendezvous = { path = "../rendezvous" }
+# T13/T14 tests: the fake peer dials via BlobTicket (workspace pin, already in
+# the lockfile via core).
+iroh-blobs = { workspace = true }
+
