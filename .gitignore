@@ -1,9 +1,9 @@
 # my-croc workspace ignores
 /target
-/flutter
-/flutter/build
 .dart_tool
 .idea
 *.local
+# flutter app/build artifacts are ignored by flutter/app/.gitignore (flutter create)
+# bridge crate + cargokit artifacts by flutter/.gitignore
 # opencode internal state (run-continuation is session bookkeeping, not source)
 .omo/run-continuation/

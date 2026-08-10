@@ -1,0 +1,11 @@
+# my-croc flutter/ artifacts (app/ has its own .gitignore from flutter create)
+
+# Rust bridge crate build output
+/rust/target/
+
+# cargokit / plugin build tooling state
+**/.dart_tool/
+**/build/
+**/.plugin_symlinks/
+**/.pub-cache/
+/rust_builder/pubspec.lock
