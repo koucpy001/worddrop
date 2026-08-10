@@ -1,0 +1,274 @@
+# my-croc CI (plan T22): Linux/Windows/macOS build + test gate.
+#
+# Three jobs, one per OS:
+#   ubuntu — primary gate: cargo test (root workspace: core/rendezvous/cli),
+#            clippy -D warnings, rustfmt, cargo test for the FRB bridge crate
+#            (flutter/rust standalone workspace), flutter analyze + hermetic
+#            widget tests, `flutter build linux` + CLI release binary.
+#   windows — cargo test + `flutter build windows` + CLI release .exe.
+#   macos — cargo test + `flutter build macos` (unsigned, no signing).
+#
+# Notes:
+# - GitHub runners reach crates.io directly; the rsproxy mirror is local-dev
+#   only and must NOT be configured here.
+# - `cargo test` on the root workspace runs the T11 e2e suite, which HARD
+#   depends on the `iroh-relay` binary (looks in ~/.cargo/bin first, then
+#   PATH). Installing it from source takes 5-10 min per job, so it is cached
+#   with actions/cache keyed on the version pin (1.0.3) + runner OS; the
+#   cache-miss step runs `cargo install` with `--features server` (without it
+#   the lib builds but NO binary is produced — T1 trap).
+# - The Cargo registry + git caches are keyed on Cargo.lock hashes; both the
+#   root workspace and the standalone flutter/rust bridge workspace lockfiles
+#   are covered by hashFiles('**/Cargo.lock').
+# - `flutter/app` ships only the android + linux platform dirs; the macos/
+#   and windows/ dirs are generated in CI via `flutter create --platforms=...`
+#   (keeps the repo lean; generated dirs are build-time only).
+# - rust 1.97.1 comes from rust-toolchain.toml (dtolnay/rust-toolchain reads
+#   it); flutter 3.44.9 matches the locally verified toolchain.
+# - No secrets, no deploy steps (deployment is plan T25).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ubuntu:
+    name: ubuntu (test + clippy + rustfmt + flutter)
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux desktop build dependencies
+        run: |
+          sudo apt-get update -y
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            build-essential clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev
+
+      - name: Install Rust (pinned 1.97.1, matches rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+
+      - name: Cache iroh-relay binary (version-pinned)
+        id: relay-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/iroh-relay
+          key: iroh-relay-1.0.3-${{ runner.os }}
+
+      - name: Install iroh-relay (cache miss, 5-10 min)
+        if: steps.relay-cache.outputs.cache-hit != 'true'
+        run: cargo install iroh-relay --version 1.0.3 --features server
+
+      - name: Test workspace (core, rendezvous, cli)
+        run: cargo test --workspace -j 2
+
+      - name: Clippy (workspace, all targets)
+        run: cargo clippy --workspace --all-targets -j 2 -- -D warnings
+
+      - name: Format check (workspace)
+        run: cargo fmt --all --check
+
+      - name: Test FRB bridge crate (flutter/rust standalone workspace)
+        run: cargo test --manifest-path flutter/rust/Cargo.toml -j 2
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.9
+          cache: true
+
+      - name: Flutter pub get
+        working-directory: flutter/app
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: flutter/app
+        run: flutter analyze
+
+      - name: Widget tests (hermetic — no native build)
+        working-directory: flutter/app
+        run: flutter test
+
+      - name: Build Linux app (cargokit builds the bridge cdylib)
+        working-directory: flutter/app
+        run: flutter build linux --release
+
+      - name: Build CLI release binary
+        run: cargo build --release -j 2
+
+      - name: Upload Linux CLI binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-croc-linux-cli
+          path: target/release/my-croc
+          if-no-files-found: error
+
+      - name: Upload Linux app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-croc-linux-app
+          path: flutter/app/build/linux/x64/release/bundle
+          if-no-files-found: error
+
+  windows:
+    name: windows (cargo test + flutter build windows)
+    runs-on: windows-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust (pinned 1.97.1, matches rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@1.97.1
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+
+      - name: Cache iroh-relay binary (version-pinned)
+        id: relay-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/iroh-relay.exe
+          key: iroh-relay-1.0.3-${{ runner.os }}
+
+      - name: Install iroh-relay (cache miss, 5-10 min)
+        if: steps.relay-cache.outputs.cache-hit != 'true'
+        run: cargo install iroh-relay --version 1.0.3 --features server
+
+      - name: Test workspace (core, rendezvous, cli)
+        run: cargo test --workspace -j 2
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.9
+          cache: true
+
+      - name: Add Windows desktop platform (flutter create)
+        working-directory: flutter/app
+        run: flutter create --platforms=windows .
+
+      - name: Flutter pub get
+        working-directory: flutter/app
+        run: flutter pub get
+
+      - name: Build Windows app (cargokit builds the bridge cdylib)
+        working-directory: flutter/app
+        run: flutter build windows --release
+
+      - name: Build CLI release binary
+        run: cargo build --release -j 2
+
+      - name: Upload Windows CLI binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-croc-windows-cli
+          path: target/release/my-croc.exe
+          if-no-files-found: error
+
+      - name: Upload Windows app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-croc-windows-app
+          path: flutter/app/build/windows/x64/runner/Release
+          if-no-files-found: error
+
+  macos:
+    name: macos (flutter build macos + cargo test)
+    runs-on: macos-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust (pinned 1.97.1, matches rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@1.97.1
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+
+      - name: Cache iroh-relay binary (version-pinned)
+        id: relay-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/iroh-relay
+          key: iroh-relay-1.0.3-${{ runner.os }}
+
+      - name: Install iroh-relay (cache miss, 5-10 min)
+        if: steps.relay-cache.outputs.cache-hit != 'true'
+        run: cargo install iroh-relay --version 1.0.3 --features server
+
+      - name: Test workspace (core, rendezvous, cli)
+        run: cargo test --workspace -j 2
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.9
+          cache: true
+
+      - name: Add macOS desktop platform (flutter create)
+        working-directory: flutter/app
+        run: flutter create --platforms=macos .
+
+      - name: Flutter pub get
+        working-directory: flutter/app
+        run: flutter pub get
+
+      # No signing/notarization — out of scope (plan T25 note); the .app is
+      # unsigned and must be right-click-opened / Gatekeeper-overridden.
+      - name: Build macOS app (unsigned)
+        working-directory: flutter/app
+        run: flutter build macos --release
+
+      - name: Upload macOS app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-croc-macos-app
+          path: flutter/app/build/macos/Build/Products/Release/*.app
+          if-no-files-found: error
