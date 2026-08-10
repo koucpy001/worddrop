@@ -40,6 +40,7 @@ dependencies:
   my_croc_bridge:
     path: ../rust_builder
   file_picker: ^11.0.3
+  shared_preferences: ^2.5.0
 
 dev_dependencies:
   flutter_test:
