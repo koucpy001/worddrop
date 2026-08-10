@@ -84,6 +84,43 @@ emulator/KVM，无法真机验证）。在有实体 Android 设备时按以下�
    "继续上次传输"并可续传完成。
 7. 反向：Android → 桌面同样验证一次。
 
+## 自托管部署与 TLS (Self-hosted deployment & TLS story)
+
+部署产物在 [`deploy/`](deploy/)：`docker-compose.yml`（iroh-relay + my-croc-rendezvous
+两个服务，`restart: unless-stopped` + healthcheck）、systemd unit 文件、生产配置模板与
+详细 VPS 部署文档。客户端只需两个环境变量（或 `my-croc config set`）指向自托管服务：
+
+```sh
+export MY_CROC_RENDEZVOUS_URL=http://<host>:8080
+export MY_CROC_RELAY_URL=http://<host>:3340
+```
+
+### TLS 两条路径
+
+**生产 (a)：域名 + Let's Encrypt。** iroh-relay 1.0.3 的 TLS 不是命令行参数
+（没有 `--tls-cert/--tls-key`），而是写在 TOML 配置里（`--config-path` 传入）：
+
+```toml
+[tls]
+cert_mode = "LetsEncrypt"     # 或 "Manual"（自备公开 CA 证书）
+hostname = ["relay.example.com"]
+contact  = "admin@example.com"
+cert_dir = "/var/lib/iroh-relay"
+```
+
+iroh-relay 自带 ACME 流程自动申请/续期（LetsEncrypt 模式），提供 HTTPS 443 +
+QUIC UDP 7842。客户端侧把 relay 地址指到 `https://relay.example.com` 即可——
+iroh 客户端用内置 Mozilla webpki roots 校验，证书必须来自公开 CA。
+rendezvous 是普通 HTTP 服务，生产用 Caddy/nginx 做 HTTPS 反代（自动证书），
+8080 只监听 127.0.0.1。
+
+**开发 (b)：本地无 TLS / 自签名。** 本地开发用 `--dev` 纯 HTTP 模式（端口 3340，
+不需要任何证书）——这是本仓库所有本地测试使用的方式。自签名 HTTPS relay
+**无法**被未改动的 my-croc 客户端信任：iroh 1.0.3 的 `Endpoint::builder()` 只暴露
+`RelayMode::Custom(url)`，relay 连接用内置 webpki roots 校验（`platform-verifier`
+feature 未启用，装进系统信任库无效），也没有"关闭证书校验"的开关。想验证
+TLS 全链路只能配真实域名 + Let's Encrypt。详见 [`deploy/README.md`](deploy/README.md)。
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

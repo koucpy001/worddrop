@@ -1,0 +1,82 @@
+# my-croc self-hosted infrastructure: iroh-relay + my-croc-rendezvous.
+#
+# Default profile runs iroh-relay in --dev mode (plain HTTP on 3340) — the
+# same mode the whole project's local smoke/e2e tests use. For production TLS
+# see deploy/README.md (TLS story): switch the relay command to
+# `--config-path /etc/iroh-relay/relay.toml` (LetsEncrypt or manual cert) and
+# terminate rendezvous HTTPS with Caddy/nginx, or put both behind a reverse proxy.
+#
+# Host ports are fixed at the documented defaults (3340 relay / 8080
+# rendezvous / 9090 relay metrics). If the host already runs services on
+# these ports, stop them or adjust the left-hand side.
+
+name: my-croc
+
+services:
+  iroh-relay:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.iroh-relay
+      # Mirror overrides for slow/firewalled networks; empty = official sources
+      # (crates.io + deb.debian.org) which is correct on any VPS/CI host.
+      # China example:
+      #   MY_CROC_APT_MIRROR=mirrors.tencentyun.com
+      #   MY_CROC_CARGO_REGISTRY=sparse+https://rsproxy.cn/index/
+      args:
+        APT_MIRROR: "${MY_CROC_APT_MIRROR:-}"
+        CARGO_REGISTRY: "${MY_CROC_CARGO_REGISTRY:-}"
+        CARGO_BUILD_JOBS: "${MY_CROC_CARGO_JOBS:-2}"
+    image: my-croc/iroh-relay:1.0.3
+    container_name: my-croc-iroh-relay
+    restart: unless-stopped
+    command: ["--dev"]
+    ports:
+      - "3340:3340"        # HTTP relay (--dev mode)
+      # Production TLS (uncomment + switch command to --config-path):
+      # - "443:443"        # HTTPS relay
+      # - "7842:7842/udp"  # QUIC relay (relay QUIC address discovery)
+      - "9090:9090"        # relay metrics (optional)
+    volumes:
+      # Production TLS: mount a directory with relay.toml + certs read-only,
+      # e.g. ./iroh-relay/:/etc/iroh-relay/:ro (see deploy/README.md).
+      - ./iroh-relay:/etc/iroh-relay:ro
+    healthcheck:
+      # --dev serves the relay web page on GET /; prod HTTPS serves it on 443.
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3340/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  my-croc-rendezvous:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.rendezvous
+      args:
+        APT_MIRROR: "${MY_CROC_APT_MIRROR:-}"
+        CARGO_REGISTRY: "${MY_CROC_CARGO_REGISTRY:-}"
+    image: my-croc/rendezvous:0.1.0
+    container_name: my-croc-rendezvous
+    restart: unless-stopped
+    environment:
+      # MUST be 0.0.0.0 inside the container (binary default is 127.0.0.1).
+      MY_CROC_RENDEZVOUS_ADDR: "0.0.0.0:8080"
+      # Optional: RUST_LOG=my_croc_rendezvous=info
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

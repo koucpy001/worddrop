@@ -1,0 +1,39 @@
+# iroh-relay 1.0.3 — iroh's relay server (QUIC + HTTP/WS proxying).
+#
+# TLS is NOT configured with CLI flags in 1.0.3: it lives in the TOML config
+# file passed via --config-path (see deploy/README.md "TLS story"). The unit
+# below uses the production config template; swap in `--dev` + port 3340 for
+# a plain-HTTP local install.
+#
+# Install on the VPS:
+#   sudo useradd --system --home /var/lib/iroh-relay --shell /usr/sbin/nologin iroh-relay
+#   sudo install -m 0755 iroh-relay /usr/local/bin/
+#   sudo install -d -o iroh-relay -g iroh-relay /etc/iroh-relay
+#   sudo install -m 0644 iroh-relay.prod.toml /etc/iroh-relay/relay.toml
+#   # (LetsEncrypt mode writes its cert cache to /var/lib/iroh-relay — the
+#   #  User's home; Manual mode reads /etc/iroh-relay/default.crt|.key)
+#   sudo install -m 0644 iroh-relay.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now iroh-relay
+
+[Unit]
+Description=iroh relay server (my-croc transport fallback)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=iroh-relay
+Group=iroh-relay
+# Production: TLS from /etc/iroh-relay/relay.toml (HTTPS 443 + QUIC UDP 7842).
+ExecStart=/usr/local/bin/iroh-relay --config-path /etc/iroh-relay/relay.toml
+Restart=always
+RestartSec=5
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/iroh-relay
+
+[Install]
+WantedBy=multi-user.target

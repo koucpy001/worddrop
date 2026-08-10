@@ -1,0 +1,53 @@
+# iroh-relay 1.0.3 server image.
+#
+# Pinned binary build: `cargo install iroh-relay --version 1.0.3 --features server`
+# (the `server` feature is REQUIRED — without it the install produces no binary,
+# see learnings T1). Default features (`metrics`, `tls-ring`) are kept: ring is
+# the rustls crypto provider and the metrics server listens on 9090.
+#
+# Build args (empty = official sources, correct for any VPS/CI):
+#   APT_MIRROR       e.g. mirrors.tencentyun.com (China) for apt
+#   CARGO_REGISTRY   e.g. sparse+https://rsproxy.cn/index/ (China) for cargo
+#                    (sparse+ form; a bare URL is treated as a git index)
+#   CARGO_BUILD_JOBS default 2 (memory-friendly on small hosts)
+
+ARG APT_MIRROR=""
+
+FROM rust:1.97-slim-bookworm AS builder
+
+ARG APT_MIRROR
+RUN if [ -n "$APT_MIRROR" ]; then \
+      sed -i "s|deb.debian.org|$APT_MIRROR|g; s|security.debian.org|$APT_MIRROR|g" /etc/apt/sources.list.d/debian.sources; \
+    fi \
+    && apt-get update && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG CARGO_REGISTRY=""
+ARG CARGO_BUILD_JOBS=2
+# Default to crates.io; override on slow/firewalled networks (China: rsproxy.cn).
+RUN if [ -n "$CARGO_REGISTRY" ]; then \
+      printf '[source.crates-io]\nreplace-with = "mirror"\n[source.mirror]\nregistry = "%s"\n' "$CARGO_REGISTRY" > /usr/local/cargo/config.toml; \
+    fi \
+    && cargo install iroh-relay --version 1.0.3 --features server -j "$CARGO_BUILD_JOBS"
+
+FROM debian:bookworm-slim AS runtime
+
+ARG APT_MIRROR
+# curl for the compose healthcheck; ca-certificates so the relay can validate
+# Let's Encrypt ACME endpoints and outbound HTTPS (e.g. HTTP access checks).
+RUN if [ -n "$APT_MIRROR" ]; then \
+      sed -i "s|deb.debian.org|$APT_MIRROR|g; s|security.debian.org|$APT_MIRROR|g" /etc/apt/sources.list.d/debian.sources; \
+    fi \
+    && apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /usr/local/cargo/bin/iroh-relay /usr/local/bin/iroh-relay
+
+# 3340 = --dev HTTP relay; 443 = HTTPS (prod); 7842 = QUIC/UDP (prod);
+# 9090 = metrics (default on).
+EXPOSE 3340 443 7842/udp 9090
+
+# Default: local dev mode (plain HTTP, no TLS). For production pass a config
+# file: iroh-relay --config-path /etc/iroh-relay/relay.toml (see README TLS story).
+ENTRYPOINT ["iroh-relay"]
+CMD ["--dev"]

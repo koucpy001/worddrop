@@ -1,0 +1,53 @@
+# my-croc-rendezvous server image.
+#
+# Multi-stage build of the workspace's rendezvous crate only (no path deps on
+# other workspace crates). Build context MUST be the repo root
+# (`docker compose` handles this via the compose file's build.context),
+# which also picks up the root .dockerignore (excludes target/, flutter/, .git).
+#
+# Build args (empty = official sources, correct for any VPS/CI):
+#   APT_MIRROR      e.g. mirrors.tencentyun.com (China) for apt
+#   CARGO_REGISTRY  e.g. sparse+https://rsproxy.cn/index/ (China) for cargo
+#                   (sparse+ form; a bare URL is treated as a git index)
+
+ARG APT_MIRROR=""
+
+FROM rust:1.97-slim-bookworm AS builder
+
+ARG APT_MIRROR
+RUN if [ -n "$APT_MIRROR" ]; then \
+      sed -i "s|deb.debian.org|$APT_MIRROR|g; s|security.debian.org|$APT_MIRROR|g" /etc/apt/sources.list.d/debian.sources; \
+    fi \
+    && apt-get update && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ ./crates/
+
+ARG CARGO_REGISTRY=""
+# Default to crates.io; override on slow/firewalled networks (China: rsproxy.cn).
+RUN if [ -n "$CARGO_REGISTRY" ]; then \
+      printf '[source.crates-io]\nreplace-with = "mirror"\n[source.mirror]\nregistry = "%s"\n' "$CARGO_REGISTRY" > /usr/local/cargo/config.toml; \
+    fi \
+    && cargo build --release -p my-croc-rendezvous -j 2
+
+FROM debian:bookworm-slim AS runtime
+
+ARG APT_MIRROR
+# curl for the compose healthcheck.
+RUN if [ -n "$APT_MIRROR" ]; then \
+      sed -i "s|deb.debian.org|$APT_MIRROR|g; s|security.debian.org|$APT_MIRROR|g" /etc/apt/sources.list.d/debian.sources; \
+    fi \
+    && apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /src/target/release/my-croc-rendezvous /usr/local/bin/my-croc-rendezvous
+
+# Must bind 0.0.0.0 inside the container (the binary default is 127.0.0.1:8080,
+# which would be unreachable from outside the container). compose sets this.
+ENV MY_CROC_RENDEZVOUS_ADDR=0.0.0.0:8080
+
+EXPOSE 8080
+
+ENTRYPOINT ["my-croc-rendezvous"]

@@ -1,0 +1,32 @@
+# my-croc-rendezvous — axum mailbox server (code <-> ticket pairing).
+#
+# Install on the VPS:
+#   sudo useradd --system --home /var/lib/my-croc --shell /usr/sbin/nologin my-croc
+#   sudo install -m 0755 my-croc-rendezvous /usr/local/bin/
+#   sudo install -m 0644 my-croc-rendezvous.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now my-croc-rendezvous
+
+[Unit]
+Description=my-croc rendezvous server (pairing code mailbox)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=my-croc
+Group=my-croc
+# Bind 0.0.0.0 so the service is reachable beyond localhost; put a reverse
+# proxy (Caddy/nginx) in front for HTTPS in production.
+Environment=MY_CROC_RENDEZVOUS_ADDR=0.0.0.0:8080
+Environment=RUST_LOG=my_croc_rendezvous=info
+ExecStart=/usr/local/bin/my-croc-rendezvous
+Restart=always
+RestartSec=5
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

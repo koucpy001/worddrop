@@ -1,0 +1,9 @@
+# Docker build context hygiene for the my-croc images.
+# The rendezvous build context is the repo root; keep the daemon upload tiny.
+
+target
+flutter
+.git
+.omo
+*.log
+*.local
