@@ -2503,7 +2503,7 @@ dependencies = [
 
 [[package]]
 name = "my-croc-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "indicatif",
@@ -2521,7 +2521,7 @@ dependencies = [
 
 [[package]]
 name = "my-croc-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "dirs",
  "hkdf",
@@ -2540,7 +2540,7 @@ dependencies = [
 
 [[package]]
 name = "my-croc-rendezvous"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "axum",
  "rand 0.9.5",
