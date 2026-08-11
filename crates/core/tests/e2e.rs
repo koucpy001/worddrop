@@ -149,7 +149,11 @@ fn relay_binary() -> Result<PathBuf, String> {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .map_err(|_| "neither HOME nor USERPROFILE is set".to_string())?;
-    let exe = if cfg!(windows) { "iroh-relay.exe" } else { "iroh-relay" };
+    let exe = if cfg!(windows) {
+        "iroh-relay.exe"
+    } else {
+        "iroh-relay"
+    };
     let cargo_bin = PathBuf::from(home).join(".cargo/bin").join(exe);
     if cargo_bin.is_file() {
         return Ok(cargo_bin);
