@@ -70,10 +70,9 @@ async fn spawn_rendezvous() -> (String, JoinHandle<()>) {
         .await
         .expect("bind ephemeral port");
     let addr = listener.local_addr().expect("local addr");
-    drop(listener);
     let url = format!("http://{addr}");
     let handle = tokio::spawn(async move {
-        let _ = my_croc_rendezvous::server::serve(addr).await;
+        let _ = my_croc_rendezvous::server::serve_on(listener).await;
     });
     let client = RvClient::new(&url);
     let deadline = std::time::Instant::now() + Duration::from_secs(10);

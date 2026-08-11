@@ -297,11 +297,9 @@ async fn spawn_rendezvous() -> (String, JoinHandle<()>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind ephemeral rendezvous port");
-    let addr = listener.local_addr().expect("local addr");
-    drop(listener);
-    let url = format!("http://{addr}");
+    let url = format!("http://{}", listener.local_addr().expect("local addr"));
     let handle = tokio::spawn(async move {
-        let _ = my_croc_rendezvous::server::serve(addr).await;
+        let _ = my_croc_rendezvous::server::serve_on(listener).await;
     });
     // The serve task binds asynchronously; poll /health until it answers.
     let client = RvClient::new(&url);
