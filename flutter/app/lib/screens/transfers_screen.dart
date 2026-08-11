@@ -1,7 +1,10 @@
 // Transfers screen — list of active transfers (progress bar + cancel) and
 // completed/cancelled/failed history. History is persisted locally via
-// TransferHistory (shared_preferences JSON list of {code, names, bytes,
-// time, status}). All user-facing copy is Chinese (AGENTS.md).
+// TransferHistory (shared_preferences JSON list of {nameplate, names,
+// bytes, time, status}). The pairing word-code is never persisted — history
+// shows only the numeric nameplate; the full code appears solely on the
+// live (in-memory) active card while a transfer is in flight. All
+// user-facing copy is Chinese (AGENTS.md).
 
 import 'package:flutter/material.dart';
 
@@ -162,6 +165,9 @@ class _ActiveCard extends StatelessWidget {
             const SizedBox(height: AppSpacing.sm),
             Row(
               children: [
+                // Full code shown while live: the user reads it to share
+                // with the peer. It exists only in memory here — history
+                // persists just the numeric nameplate.
                 Text(
                   transfer.code,
                   style: const TextStyle(
@@ -259,7 +265,7 @@ class _HistoryCard extends StatelessWidget {
             Row(
               children: [
                 Text(
-                  record.code,
+                  record.nameplate,
                   style: const TextStyle(
                       fontFamily: AppType.mono,
                       fontSize: 12,

@@ -103,10 +103,12 @@ void main() {
       await tester.tap(find.text('取消'));
       await tester.pumpAndSettle();
 
-      // Active becomes history with '已取消' label.
+      // Active becomes history with '已取消' label; only the numeric
+      // nameplate is shown (the word-code is never kept around).
       expect(find.text('进行中'), findsNothing);
       expect(find.text('已取消'), findsOneWidget);
-      expect(find.textContaining('7-correct-horse-battery'), findsOneWidget);
+      expect(find.text('7'), findsOneWidget);
+      expect(find.textContaining('7-correct-horse-battery'), findsNothing);
     });
 
     testWidgets('multiple active transfers render in order', (tester) async {
@@ -130,7 +132,7 @@ void main() {
     testWidgets('completed transfer shows with 已完成 status', (tester) async {
       final store = TransferHistory.instance;
       store.history.add(TransferRecord(
-        code: '7-correct-horse-battery',
+        nameplate: '7',
         names: ['photo.zip'],
         bytes: BigInt.from(1048576),
         time: DateTime.now().subtract(const Duration(hours: 2)),
@@ -144,7 +146,7 @@ void main() {
       expect(find.text('已完成'), findsOneWidget);
       expect(find.text('photo.zip'), findsOneWidget);
       expect(find.text('1.0 MiB'), findsOneWidget);
-      expect(find.textContaining('7-correct-horse-battery'), findsOneWidget);
+      expect(find.text('7'), findsOneWidget);
       // No cancel buttons (history only).
       expect(find.text('取消'), findsNothing);
     });
@@ -152,7 +154,7 @@ void main() {
     testWidgets('cancelled transfer shows with 已取消 status', (tester) async {
       final store = TransferHistory.instance;
       store.history.add(TransferRecord(
-        code: '3-abc-def-ghi',
+        nameplate: '3',
         names: ['notes.txt'],
         bytes: BigInt.from(512),
         time: DateTime.now().subtract(const Duration(minutes: 5)),
@@ -171,7 +173,7 @@ void main() {
     testWidgets('failed transfer shows with 失败 status', (tester) async {
       final store = TransferHistory.instance;
       store.history.add(TransferRecord(
-        code: '5-jkl-mno-pqr',
+        nameplate: '5',
         names: ['large.bin'],
         bytes: BigInt.zero,
         time: DateTime.now().subtract(const Duration(days: 1)),
@@ -191,7 +193,7 @@ void main() {
       store.addActive(_active('4-stu-vwx-yza', 'sent',
           received: BigInt.from(2048)));
       store.history.add(TransferRecord(
-        code: '6-bcd-efg-hij',
+        nameplate: '6',
         names: ['doc.pdf'],
         bytes: BigInt.from(204800),
         time: DateTime.now().subtract(const Duration(days: 2)),
@@ -219,7 +221,7 @@ void main() {
       // Step 1: add a record.
       final store = TransferHistory.instance;
       final record = TransferRecord(
-        code: '7-correct-horse-battery',
+        nameplate: '7',
         names: ['file.bin'],
         bytes: BigInt.from(4096),
         time: DateTime.now(),
@@ -237,7 +239,7 @@ void main() {
       // Step 3: verify the record is back.
       expect(TransferHistory.instance.history, hasLength(1));
       final loaded = TransferHistory.instance.history.first;
-      expect(loaded.code, '7-correct-horse-battery');
+      expect(loaded.nameplate, '7');
       expect(loaded.names, ['file.bin']);
       expect(loaded.bytes, BigInt.from(4096));
       expect(loaded.status, 'completed');
@@ -248,7 +250,7 @@ void main() {
         (tester) async {
       final store = TransferHistory.instance;
       store.history.add(TransferRecord(
-        code: '1-aaa-bbb-ccc',
+        nameplate: '1',
         names: ['a.txt'],
         bytes: BigInt.from(100),
         time: DateTime.now(),
@@ -256,7 +258,7 @@ void main() {
         direction: 'sent',
       ));
       store.history.add(TransferRecord(
-        code: '2-ddd-eee-fff',
+        nameplate: '2',
         names: ['b.txt'],
         bytes: BigInt.from(200),
         time: DateTime.now(),
@@ -271,7 +273,7 @@ void main() {
 
       final history = TransferHistory.instance.history;
       expect(history, hasLength(2));
-      expect(history[0].code, '1-aaa-bbb-ccc'); // first added = first
+      expect(history[0].nameplate, '1'); // first added = first
       expect(history[1].status, 'cancelled');
     });
   });

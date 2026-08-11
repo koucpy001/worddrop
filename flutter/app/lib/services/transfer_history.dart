@@ -1,6 +1,13 @@
 // Transfer history service — ChangeNotifier that tracks active transfers
 // in memory and persists completed/cancelled/failed transfers to
-// shared_preferences as a JSON list of {code, names, bytes, time, status}.
+// shared_preferences as a JSON list of {nameplate, names, bytes, time,
+// status, direction}.
+//
+// SECURITY: the pairing word-code IS the SPAKE2 password and must NEVER be
+// persisted. History records store only the numeric `nameplate` prefix (the
+// non-secret mailbox handle); the full code exists solely in the in-memory
+// ActiveTransfer during the live transfer. Legacy records written before
+// this fix carried a `code` field — it is stripped on load (migrated).
 //
 // Storage choice: shared_preferences (simple, no path_provider dep needed,
 // built-in mock for widget tests via SharedPreferences.setMockInitialValues).
@@ -14,7 +21,10 @@ const _historyKey = 'transfer_history';
 
 /// A completed or terminal transfer stored in local history.
 class TransferRecord {
-  final String code;
+  /// The numeric prefix of the pairing code (e.g. "4173" from
+  /// "4173-caretaker-fascinate-cellulose"). The words are the SPAKE2
+  /// password and are deliberately NOT stored here.
+  final String nameplate;
   final List<String> names;
   final BigInt bytes;
   final DateTime time;
@@ -22,7 +32,7 @@ class TransferRecord {
   final String direction; // 'sent', 'received'
 
   const TransferRecord({
-    required this.code,
+    required this.nameplate,
     required this.names,
     required this.bytes,
     required this.time,
@@ -30,8 +40,15 @@ class TransferRecord {
     required this.direction,
   });
 
+  /// The numeric nameplate of a full word-code: everything before the first
+  /// '-'. Codes are `N-word-word-word`; a code without a '-' yields itself.
+  static String nameplateOf(String code) {
+    final idx = code.indexOf('-');
+    return idx == -1 ? code : code.substring(0, idx);
+  }
+
   Map<String, dynamic> toJson() => {
-        'code': code,
+        'nameplate': nameplate,
         'names': names,
         'bytes': bytes.toString(),
         'time': time.toIso8601String(),
@@ -39,15 +56,26 @@ class TransferRecord {
         'direction': direction,
       };
 
-  factory TransferRecord.fromJson(Map<String, dynamic> json) =>
-      TransferRecord(
-        code: json['code'] as String,
-        names: (json['names'] as List<dynamic>).cast<String>(),
-        bytes: BigInt.parse(json['bytes'] as String),
-        time: DateTime.parse(json['time'] as String),
-        status: json['status'] as String,
-        direction: json['direction'] as String? ?? 'sent',
-      );
+  /// Parses a persisted record. Throws [FormatException] on a corrupt entry
+  /// (the caller quarantines it). Legacy records from before the security
+  /// fix carry the full word-code in `code` — it is migrated: the secret
+  /// words are dropped and only the numeric prefix is kept as `nameplate`.
+  factory TransferRecord.fromJson(Map<String, dynamic> json) {
+    String? nameplate = json['nameplate'] as String?;
+    final legacyCode = json['code'] as String?;
+    if (nameplate == null && legacyCode == null) {
+      throw const FormatException('history record missing identity');
+    }
+    nameplate ??= nameplateOf(legacyCode!);
+    return TransferRecord(
+      nameplate: nameplate,
+      names: (json['names'] as List<dynamic>).cast<String>(),
+      bytes: BigInt.parse(json['bytes'] as String),
+      time: DateTime.parse(json['time'] as String),
+      status: json['status'] as String,
+      direction: json['direction'] as String? ?? 'sent',
+    );
+  }
 }
 
 /// An in-progress transfer (live, not persisted until terminal).
@@ -143,7 +171,7 @@ class TransferHistory extends ChangeNotifier {
     if (idx == -1) return;
     final t = _active.removeAt(idx);
     final record = TransferRecord(
-      code: t.code,
+      nameplate: TransferRecord.nameplateOf(t.code),
       names: t.names,
       bytes: t.totalBytes,
       time: DateTime.now(),
@@ -151,7 +179,7 @@ class TransferHistory extends ChangeNotifier {
       direction: t.direction,
     );
     history.insert(0, record);
-    await persistForTest();
+    await _persist();
     notifyListeners();
   }
 
@@ -161,7 +189,7 @@ class TransferHistory extends ChangeNotifier {
     if (idx == -1) return;
     final t = _active.removeAt(idx);
     final record = TransferRecord(
-      code: t.code,
+      nameplate: TransferRecord.nameplateOf(t.code),
       names: t.names,
       bytes: t.received,
       time: DateTime.now(),
@@ -169,7 +197,7 @@ class TransferHistory extends ChangeNotifier {
       direction: t.direction,
     );
     history.insert(0, record);
-    await persistForTest();
+    await _persist();
     notifyListeners();
   }
 
@@ -179,7 +207,7 @@ class TransferHistory extends ChangeNotifier {
     if (idx == -1) return;
     final t = _active.removeAt(idx);
     final record = TransferRecord(
-      code: t.code,
+      nameplate: TransferRecord.nameplateOf(t.code),
       names: t.names,
       bytes: t.received,
       time: DateTime.now(),
@@ -187,32 +215,60 @@ class TransferHistory extends ChangeNotifier {
       direction: t.direction,
     );
     history.insert(0, record);
-    await persistForTest();
+    await _persist();
     notifyListeners();
   }
 
   /// Load persisted history from shared_preferences.
+  ///
+  /// Robustness: the whole decode path is guarded — a corrupt blob or a
+  /// corrupt entry is quarantined (logged + dropped) instead of crashing the
+  /// history screen. Legacy records with a `code` field are migrated
+  /// (word-code stripped, `nameplate` kept) and the sanitized JSON is
+  /// written back once; reloading sanitized records is a no-op.
   Future<void> load() async {
     if (loaded) return;
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_historyKey);
     if (raw != null) {
-      final list = jsonDecode(raw) as List<dynamic>;
-      history = list
-          .map((e) => TransferRecord.fromJson(e as Map<String, dynamic>))
-          .toList();
+      final cleaned = <TransferRecord>[];
+      var migrated = false;
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          for (final e in decoded) {
+            if (e is! Map<String, dynamic>) continue; // quarantine non-object
+            try {
+              cleaned.add(TransferRecord.fromJson(e));
+              if (e.containsKey('code')) migrated = true;
+            } catch (err) {
+              debugPrint(
+                  'TransferHistory: quarantining corrupt record: $err');
+            }
+          }
+        }
+      } catch (err) {
+        debugPrint(
+            'TransferHistory: history JSON unreadable, starting empty: $err');
+      }
+      history = cleaned;
+      // Migration: strip legacy word-codes from disk exactly once.
+      if (migrated) await _persist();
     }
     loaded = true;
     notifyListeners();
   }
 
-  /// Persist the history list to shared_preferences.
-  @visibleForTesting
-  Future<void> persistForTest() async {
+  /// Write the current history list to shared_preferences.
+  Future<void> _persist() async {
     final prefs = await SharedPreferences.getInstance();
     final json = jsonEncode(history.map((r) => r.toJson()).toList());
     await prefs.setString(_historyKey, json);
   }
+
+  /// Persist the history list to shared_preferences (test helper).
+  @visibleForTesting
+  Future<void> persistForTest() => _persist();
 
   /// Clear all data (used for test teardown).
   static Future<void> clearForTest() async {
