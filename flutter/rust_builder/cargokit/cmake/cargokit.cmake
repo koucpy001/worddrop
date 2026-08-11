@@ -36,7 +36,12 @@ function(apply_cargokit target manifest_dir lib_name any_symbol_name)
     set(CARGOKIT_ENV
         "CARGOKIT_CMAKE=${CMAKE_COMMAND}"
         "CARGOKIT_CONFIGURATION=$<CONFIG>"
-        "CARGOKIT_MANIFEST_DIR=${CMAKE_CURRENT_SOURCE_DIR}/${manifest_dir}"
+        # Resolve the manifest through `cargokit_cmake_root` (already
+        # REALPATH/symlink-resolved) instead of `CMAKE_CURRENT_SOURCE_DIR`,
+        # which keeps Flutter's `.plugin_symlinks` path on Windows — the
+        # relative `manifest_dir` would then miss Cargo.toml and cargokit
+        # dies with "Cannot open file" (seen on Windows CI).
+        "CARGOKIT_MANIFEST_DIR=${cargokit_cmake_root}/${manifest_dir}"
         "CARGOKIT_TARGET_TEMP_DIR=${CARGOKIT_TEMP_DIR}"
         "CARGOKIT_OUTPUT_DIR=${CARGOKIT_OUTPUT_DIR}"
         "CARGOKIT_TARGET_PLATFORM=${CARGOKIT_TARGET_PLATFORM}"
