@@ -1,12 +1,17 @@
-# my-croc CI (plan T22): Linux/Windows/macOS build + test gate.
+# my-croc CI (plan T22 + T2): Linux/Windows/macOS build + test gate, plus a
+# tag-triggered GitHub Release job.
 #
-# Three jobs, one per OS:
+# Three build jobs, one per OS:
 #   ubuntu — primary gate: cargo test (root workspace: core/rendezvous/cli),
 #            clippy -D warnings, rustfmt, cargo test for the FRB bridge crate
 #            (flutter/rust standalone workspace), flutter analyze + hermetic
 #            widget tests, `flutter build linux` + CLI release binary.
 #   windows — cargo test + `flutter build windows` + CLI release .exe.
 #   macos — cargo test + `flutter build macos` (unsigned, no signing).
+#   release — only on `v*` tag pushes: downloads the 5 build-job artifacts,
+#             zips them, writes sha256sums.txt and publishes the GitHub
+#             Release (permissions: contents: write is REQUIRED — the default
+#             GITHUB_TOKEN is read-only and would 403 the publish).
 #
 # Notes:
 # - GitHub runners reach crates.io directly; the rsproxy mirror is local-dev
@@ -25,12 +30,14 @@
 #   (keeps the repo lean; generated dirs are build-time only).
 # - rust 1.97.1 comes from rust-toolchain.toml (dtolnay/rust-toolchain reads
 #   it); flutter 3.44.9 matches the locally verified toolchain.
-# - No secrets, no deploy steps (deployment is plan T25).
+# - No secrets, no keystore in CI: the release job publishes only the build
+#   artifacts + sha256sums.txt (the signed APK is attached manually, T7).
 name: CI
 
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -281,3 +288,106 @@ jobs:
           name: my-croc-macos-app
           path: flutter/app/build/macos/Build/Products/Release/*.app
           if-no-files-found: error
+
+  release:
+    name: release (publish GitHub Release on v* tags)
+    needs: [ubuntu, windows, macos]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Required — GITHUB_TOKEN defaults to read-only, which 403s the publish.
+    permissions:
+      contents: write
+
+    steps:
+      # Full history + tags: the release body lists the changelog between the
+      # previous tag and this one.
+      - name: Checkout repository (full history for changelog)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download Linux CLI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: my-croc-linux-cli
+          path: artifacts/my-croc-linux-cli
+          if-no-files-found: error
+
+      - name: Download Linux app bundle artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: my-croc-linux-app
+          path: artifacts/my-croc-linux-app
+          if-no-files-found: error
+
+      - name: Download Windows CLI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: my-croc-windows-cli
+          path: artifacts/my-croc-windows-cli
+          if-no-files-found: error
+
+      - name: Download Windows app bundle artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: my-croc-windows-app
+          path: artifacts/my-croc-windows-app
+          if-no-files-found: error
+
+      - name: Download macOS app bundle artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: my-croc-macos-app
+          path: artifacts/my-croc-macos-app
+          if-no-files-found: error
+
+      # One zip per artifact (bundles are directories; sha256sum cannot hash
+      # them directly). The released zips ARE these files, so the checksums in
+      # sha256sums.txt verify the downloaded assets 1:1.
+      - name: Package artifacts into zips (one per platform)
+        working-directory: artifacts
+        run: |
+          zip -r -q my-croc-linux-cli.zip my-croc-linux-cli
+          zip -r -q my-croc-linux-app.zip my-croc-linux-app
+          zip -r -q my-croc-windows-cli.zip my-croc-windows-cli
+          zip -r -q my-croc-windows-app.zip my-croc-windows-app
+          zip -r -q my-croc-macos-app.zip my-croc-macos-app
+
+      - name: Generate sha256sums.txt
+        working-directory: artifacts
+        run: sha256sum *.zip > sha256sums.txt
+
+      - name: Generate release body (tag name + changelog)
+        run: |
+          TAG="${{ github.ref_name }}"
+          {
+            echo "## my-croc ${TAG}"
+            echo ""
+            echo "Platform artifacts (SHA-256 checksums in sha256sums.txt):"
+            echo "- my-croc-linux-cli.zip — Linux CLI"
+            echo "- my-croc-linux-app.zip — Linux desktop GUI"
+            echo "- my-croc-windows-cli.zip — Windows CLI"
+            echo "- my-croc-windows-app.zip — Windows GUI"
+            echo "- my-croc-macos-app.zip — macOS GUI"
+            echo ""
+            echo "### Changelog"
+            PREV_TAG="$(git tag --sort=-version:refname | sed -n '2p')"
+            if [ -n "${PREV_TAG}" ]; then
+              git log --oneline "${PREV_TAG}..HEAD"
+            else
+              git log --oneline -20
+            fi
+          } > release-body.md
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/my-croc-linux-cli.zip
+            artifacts/my-croc-linux-app.zip
+            artifacts/my-croc-windows-cli.zip
+            artifacts/my-croc-windows-app.zip
+            artifacts/my-croc-macos-app.zip
+            artifacts/sha256sums.txt
+          body_path: release-body.md
