@@ -64,18 +64,6 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      # cargokit (flutter_rust_bridge) always runs `rustup run stable cargo
-      # build` for the bridge cdylib and its Toolchain enum only accepts
-      # stable/beta/nightly. Link `stable` to the pinned 1.97.1 toolchain so
-      # the bridge builds with the SAME toolchain as the rest of the
-      # workspace (otherwise cargokit downloads the latest stable and the
-      # versions can diverge).
-      - name: Alias stable toolchain to pinned 1.97.1
-        run: |
-          stable_dir="$(dirname "$(dirname "$(rustup which --toolchain 1.97.1 rustc)")")"
-          rustup toolchain link stable "$stable_dir"
-          rustup run stable rustc --version
-
       - name: Cache Cargo registry
         uses: actions/cache@v4
         with:
@@ -161,11 +149,13 @@ jobs:
       - name: Install Rust (pinned 1.97.1, matches rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@1.97.1
 
-      - name: Alias stable toolchain to pinned 1.97.1
-        run: |
-          stable_dir="$(dirname "$(dirname "$(rustup which --toolchain 1.97.1 rustc)")")"
-          rustup toolchain link stable "$stable_dir"
-          rustup run stable rustc --version
+      # cargokit (flutter_rust_bridge) only detects toolchains named
+      # stable/beta/nightly and runs `rustup run stable cargo build` for the
+      # bridge cdylib. The Windows runner image has no stable channel, so
+      # pre-install it to avoid cargokit silently downloading the latest
+      # stable mid-build (which previously surfaced as MSB8066 exit -1).
+      - name: Install stable toolchain for cargokit
+        run: rustup toolchain install stable --profile minimal
 
       - name: Cache Cargo registry
         uses: actions/cache@v4
@@ -239,11 +229,6 @@ jobs:
       - name: Install Rust (pinned 1.97.1, matches rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@1.97.1
 
-      - name: Alias stable toolchain to pinned 1.97.1
-        run: |
-          stable_dir="$(dirname "$(dirname "$(rustup which --toolchain 1.97.1 rustc)")")"
-          rustup toolchain link stable "$stable_dir"
-          rustup run stable rustc --version
 
       - name: Cache Cargo registry
         uses: actions/cache@v4
