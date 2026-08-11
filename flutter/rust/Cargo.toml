@@ -43,8 +43,12 @@ rand = "0.9"
 my-croc-rendezvous = { path = "../../crates/rendezvous" }
 
 [profile.release]
-codegen-units = 1
-lto = "thin"
+# T22 windows CI: ThinLTO + codegen-units=1 over the iroh tree OOMs the MSVC
+# linker on 7GB runners (MSB8066 exit -1 in the cargokit rule). Relax to
+# codegen-units=8 + lto=false for windows-build reliability; the linux/android
+# release artifacts still build fine with these settings.
+codegen-units = 8
+lto = false
 opt-level = "z"
 strip = "symbols"
 
