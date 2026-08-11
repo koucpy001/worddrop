@@ -174,16 +174,32 @@ fn relay_binary() -> Result<PathBuf, String> {
 /// TLS — verified against `iroh-relay --help`) and wait until its HTTP
 /// server accepts connections. Fails loudly with the relay's log when the
 /// binary is absent or exits during startup.
+///
+/// The relay is spawned with a config file pinning `http_bind_addr` to the
+/// IPv4 wildcard: `--dev` alone defaults to `[::]:3340` (main.rs: "When
+/// running with --dev defaults to [::]:3340"), and on windows the IPv6
+/// socket is V6ONLY by default, so the `127.0.0.1:3340` readiness probe below
+/// never succeeds (F2 CI windows e2e failures).
 async fn spawn_relay() -> Result<RelayGuard, String> {
     // Reuse an already-running relay instead of colliding on the port.
     if TcpStream::connect(("127.0.0.1", RELAY_PORT)).await.is_ok() {
         return Ok(RelayGuard::reused());
     }
     let path = relay_binary()?;
-    let log = temp_dir("relay").join("relay.log");
+    let dir = temp_dir("relay");
+    fs::create_dir_all(&dir).map_err(|e| format!("create relay dir: {e}"))?;
+    let config = dir.join("relay.toml");
+    fs::write(
+        &config,
+        format!("http_bind_addr = \"0.0.0.0:{RELAY_PORT}\"\n"),
+    )
+    .map_err(|e| format!("write relay config: {e}"))?;
+    let log = dir.join("relay.log");
     let log_file = File::create(&log).map_err(|e| format!("create relay log: {e}"))?;
     let child = Command::new(&path)
         .arg("--dev")
+        .arg("--config-path")
+        .arg(&config)
         .stdout(Stdio::null())
         .stderr(Stdio::from(log_file))
         .spawn()
