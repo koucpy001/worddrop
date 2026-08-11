@@ -196,6 +196,28 @@ jobs:
         working-directory: flutter/app
         run: flutter pub get
 
+      - name: Debug cargokit build with real CMake env
+        working-directory: flutter/app/windows
+        shell: pwsh
+        run: |
+          $outDir = "D:\a\my_croc\my_croc\flutter\app\build\windows\x64\plugins\my_croc_bridge\Release"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          $env:CARGOKIT_CMAKE = "cmake"
+          $env:CARGOKIT_CONFIGURATION = "Release"
+          $env:CARGOKIT_MANIFEST_DIR = "D:\a\my_croc\my_croc\flutter\rust"
+          $env:CARGOKIT_TARGET_TEMP_DIR = "D:\a\my_croc\my_croc\flutter\app\build\windows\x64\cargokit_build"
+          $env:CARGOKIT_OUTPUT_DIR = $outDir
+          $env:CARGOKIT_TARGET_PLATFORM = "windows-x64"
+          $env:CARGOKIT_TOOL_TEMP_DIR = "D:\a\my_croc\my_croc\flutter\app\build\windows\x64\cargokit_build\tool"
+          $env:CARGOKIT_ROOT_PROJECT_DIR = "D:\a\my_croc\my_croc\flutter\app"
+          & "D:\a\my_croc\my_croc\flutter\rust_builder\cargokit\run_build_tool.cmd" build-cmake 2>&1 | Tee-Object -FilePath $env:RUNNER_TEMP\cargokit-debug2.log
+          exit $LASTEXITCODE
+
+      - name: Print cargokit debug2 log
+        if: always()
+        run: |
+          if (Test-Path $env:RUNNER_TEMP\cargokit-debug2.log) { Get-Content $env:RUNNER_TEMP\cargokit-debug2.log } else { Write-Host "no log" }
+
       - name: Build Windows app (cargokit builds the bridge cdylib)
         working-directory: flutter/app
         run: flutter build windows --release
