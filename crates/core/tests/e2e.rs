@@ -140,20 +140,29 @@ impl Drop for RelayGuard {
 }
 
 /// The iroh-relay binary: `~/.cargo/bin/iroh-relay` first, then PATH.
+///
+/// Platform-aware (F2 CI windows fix): windows runners have no `HOME` (they
+/// use `USERPROFILE`) and cargo installs binaries with a `.exe` suffix, so
+/// the bare `~/.cargo/bin/iroh-relay` check always missed on windows and the
+/// e2e suite failed with "relay binary not found".
 fn relay_binary() -> Result<PathBuf, String> {
-    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
-    let cargo_bin = PathBuf::from(home).join(".cargo/bin/iroh-relay");
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map_err(|_| "neither HOME nor USERPROFILE is set".to_string())?;
+    let exe = if cfg!(windows) { "iroh-relay.exe" } else { "iroh-relay" };
+    let cargo_bin = PathBuf::from(home).join(".cargo/bin").join(exe);
     if cargo_bin.is_file() {
         return Ok(cargo_bin);
     }
-    let path = PathBuf::from("iroh-relay");
+    let path = PathBuf::from(exe);
     if path.is_file() {
         return Ok(path);
     }
     Err(format!(
-        "iroh-relay binary not found: {} does not exist and no iroh-relay in the PATH. \
+        "iroh-relay binary not found: {} does not exist and no {} in the PATH. \
          Install with: cargo install iroh-relay --version 1.0.3 --features server",
-        cargo_bin.display()
+        cargo_bin.display(),
+        exe
     ))
 }
 
