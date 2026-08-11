@@ -44,6 +44,12 @@ RUN if [ -n "$APT_MIRROR" ]; then \
 
 COPY --from=builder /src/target/release/my-croc-rendezvous /usr/local/bin/my-croc-rendezvous
 
+# Hardening: run as a non-root user. The service is stateless (in-memory
+# mailbox — verified: the crate performs no filesystem writes at runtime),
+# so no writable directories are needed.
+RUN useradd --system --uid 10002 --home /var/lib/rendezvous rendezvous
+USER rendezvous
+
 # Must bind 0.0.0.0 inside the container (the binary default is 127.0.0.1:8080,
 # which would be unreachable from outside the container). compose sets this.
 ENV MY_CROC_RENDEZVOUS_ADDR=0.0.0.0:8080

@@ -42,6 +42,18 @@ services:
     image: my-croc/iroh-relay:0.2.0
     container_name: my-croc-iroh-relay
     restart: unless-stopped
+    # Hardening (T5): non-root uid 10001 (Dockerfile USER) + no-new-privileges
+    # + mem cap + init (PID 1 zombie reaping). NET_BIND_SERVICE is harmless
+    # (bounding-set only) and required on runtimes honoring the 1024
+    # unprivileged-port floor; Docker's default ip_unprivileged_port_start=0
+    # inside containers is what actually lets uid 10001 bind :80 (do NOT set
+    # the sysctl — empirically verified).
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    init: true
+    cap_add:
+      - NET_BIND_SERVICE
     # Production: plain-HTTP full protocol server on :80 (no [tls], no
     # cert_dir). Do NOT publish 443 — Caddy owns it; no UDP ports (QUIC
     # address discovery is off — requires relay TLS, absent by design).
@@ -76,6 +88,12 @@ services:
     image: my-croc/rendezvous:0.2.0
     container_name: my-croc-rendezvous
     restart: unless-stopped
+    # Hardening (T5): non-root uid 10002 (Dockerfile USER) + no-new-privileges
+    # + mem cap + init. Binds 8080 (> 1024) — no NET_BIND_SERVICE needed.
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    init: true
     environment:
       # MUST be 0.0.0.0 inside the container (binary default is 127.0.0.1).
       MY_CROC_RENDEZVOUS_ADDR: "0.0.0.0:8080"
@@ -100,6 +118,13 @@ services:
     image: caddy:2
     container_name: my-croc-caddy
     restart: unless-stopped
+    # Runs as root INTENTIONALLY (caddy:2 image has no non-root user and Caddy
+    # must bind host 80/443) — excluded from the non-root requirement (T5),
+    # but still hardened: no-new-privileges + init + mem cap.
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    init: true
     # Sole host owner of 80/443 TCP + sole cert issuer for BOTH domains
     # (Caddy auto-HTTPS, LE certs via HTTP-01 on :80 which Caddy owns).
     ports:
@@ -141,6 +166,13 @@ services:
     image: my-croc/iroh-relay:0.2.0
     container_name: my-croc-iroh-relay-dev
     restart: unless-stopped
+    # HARDENED identically to the prod relay (T5 decision, recorded in
+    # evidence): same image -> same non-root uid 10001 via the Dockerfile USER.
+    # Binds 3340 (> 1024) — no NET_BIND_SERVICE needed.
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    init: true
     # LAN dev relay: same image, --dev mode (plain HTTP on 3340). The SOLE
     # LAN path after the prod relay moved to :80 behind Caddy (T1).
     command: ["--dev"]
