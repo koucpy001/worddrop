@@ -168,6 +168,16 @@ impl Mailbox {
         })
     }
 
+    /// Number of entries currently stored (expired entries linger until the
+    /// next purge). Backs the `pairs_active` gauge on /metrics.
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
     /// Remove all expired entries (called by the cleanup task). Returns how
     /// many were removed.
     pub fn purge_expired(&mut self, now: Instant) -> usize {

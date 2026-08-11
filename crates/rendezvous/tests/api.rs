@@ -409,3 +409,177 @@ async fn health_returns_ok() {
         .expect("body");
     assert_eq!(bytes.as_ref(), b"ok");
 }
+
+/// Parse `my_croc_rendezvous_<name> <value>` out of a Prometheus text body.
+fn metric_value(body: &str, name: &str) -> u64 {
+    body.lines()
+        .find_map(|line| {
+            let rest = line.strip_prefix(name)?.strip_prefix(' ')?;
+            rest.parse().ok()
+        })
+        .unwrap_or_else(|| panic!("metric {name:?} not found in body:\n{body}"))
+}
+
+/// Fresh state: /metrics renders every counter/gauge with HELP and TYPE lines.
+#[tokio::test]
+async fn metrics_contains_help_type_and_zero_values() {
+    let app = app(Arc::new(AppState::new()));
+
+    let response = app
+        .clone()
+        .oneshot(request(&Method::GET, "/metrics", ip_a(), Body::empty()))
+        .await
+        .expect("metrics response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let body = String::from_utf8(bytes.to_vec()).expect("utf-8 body");
+    let text = body.replace("\r\n", "\n");
+
+    for name in [
+        "my_croc_rendezvous_allocate_total",
+        "my_croc_rendezvous_claim_total",
+        "my_croc_rendezvous_rate_limited_total",
+        "my_croc_rendezvous_requests_total",
+        "my_croc_rendezvous_pairs_active",
+    ] {
+        assert!(
+            text.contains(&format!("# HELP {name} ")),
+            "missing HELP line for {name}"
+        );
+        let type_line = if name.ends_with("pairs_active") {
+            "# TYPE my_croc_rendezvous_pairs_active gauge"
+        } else {
+            &format!("# TYPE {name} counter")
+        };
+        assert!(text.contains(type_line), "missing {type_line:?}");
+        assert!(
+            text.contains(&format!("{name} ")),
+            "missing value line for {name}"
+        );
+    }
+
+    // All counters start at zero on a fresh state.
+    assert_eq!(metric_value(&text, "my_croc_rendezvous_allocate_total"), 0);
+    assert_eq!(metric_value(&text, "my_croc_rendezvous_claim_total"), 0);
+    assert_eq!(
+        metric_value(&text, "my_croc_rendezvous_rate_limited_total"),
+        0
+    );
+    assert_eq!(metric_value(&text, "my_croc_rendezvous_pairs_active"), 0);
+    // requests_total includes this /metrics request itself.
+    assert_eq!(metric_value(&text, "my_croc_rendezvous_requests_total"), 1);
+}
+
+/// Counters increment on the allocate and claim paths; pairs_active tracks the
+/// mailbox size (1 live pair after allocate, 0 after claim).
+#[tokio::test]
+async fn metrics_reflect_allocate_claim_and_pairs_active() {
+    let app = app(Arc::new(AppState::new()));
+
+    let response = app
+        .clone()
+        .oneshot(request(
+            &Method::POST,
+            "/v1/pairs",
+            ip_a(),
+            json_body(&serde_json::json!({ "ticket": "ticket-payload" })),
+        ))
+        .await
+        .expect("allocate");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let created: AllocateResponse = serde_json::from_value(read_json(response).await).unwrap();
+
+    let metrics = app
+        .clone()
+        .oneshot(request(&Method::GET, "/metrics", ip_a(), Body::empty()))
+        .await
+        .expect("metrics after allocate");
+    let bytes = axum::body::to_bytes(metrics.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let text = String::from_utf8(bytes.to_vec())
+        .expect("utf-8")
+        .replace("\r\n", "\n");
+    assert_eq!(metric_value(&text, "my_croc_rendezvous_allocate_total"), 1);
+    assert_eq!(metric_value(&text, "my_croc_rendezvous_claim_total"), 0);
+    assert_eq!(metric_value(&text, "my_croc_rendezvous_pairs_active"), 1);
+
+    let claim_uri = format!("/v1/pairs/{}/claim", created.nameplate);
+    let claim = app
+        .clone()
+        .oneshot(request(&Method::POST, &claim_uri, ip_a(), Body::empty()))
+        .await
+        .expect("claim");
+    assert_eq!(claim.status(), StatusCode::OK);
+
+    let metrics = app
+        .clone()
+        .oneshot(request(&Method::GET, "/metrics", ip_a(), Body::empty()))
+        .await
+        .expect("metrics after claim");
+    let bytes = axum::body::to_bytes(metrics.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let text = String::from_utf8(bytes.to_vec())
+        .expect("utf-8")
+        .replace("\r\n", "\n");
+    assert_eq!(metric_value(&text, "my_croc_rendezvous_allocate_total"), 1);
+    assert_eq!(metric_value(&text, "my_croc_rendezvous_claim_total"), 1);
+    // The pair was claimed but is still tracked until TTL expiry/purge.
+    assert_eq!(metric_value(&text, "my_croc_rendezvous_pairs_active"), 1);
+    // 2 API calls + 2 metrics fetches (each fetch counts itself).
+    assert_eq!(metric_value(&text, "my_croc_rendezvous_requests_total"), 4);
+}
+
+/// Rate-limited requests bump rate_limited_total (and still count as requests).
+#[tokio::test]
+async fn rate_limited_requests_increment_rate_limited_counter() {
+    let app = app(Arc::new(AppState::new()));
+
+    for _ in 0..CREATE_LIMIT_PER_MINUTE {
+        let response = app
+            .clone()
+            .oneshot(request(
+                &Method::POST,
+                "/v1/pairs",
+                ip_a(),
+                json_body(&serde_json::json!({ "ticket": "t" })),
+            ))
+            .await
+            .expect("create");
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+    let blocked = app
+        .clone()
+        .oneshot(request(
+            &Method::POST,
+            "/v1/pairs",
+            ip_a(),
+            json_body(&serde_json::json!({ "ticket": "t" })),
+        ))
+        .await
+        .expect("blocked create");
+    assert_eq!(blocked.status(), StatusCode::TOO_MANY_REQUESTS);
+
+    let metrics = app
+        .clone()
+        .oneshot(request(&Method::GET, "/metrics", ip_a(), Body::empty()))
+        .await
+        .expect("metrics");
+    let bytes = axum::body::to_bytes(metrics.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let text = String::from_utf8(bytes.to_vec())
+        .expect("utf-8")
+        .replace("\r\n", "\n");
+    assert_eq!(
+        metric_value(&text, "my_croc_rendezvous_rate_limited_total"),
+        1
+    );
+    assert_eq!(metric_value(&text, "my_croc_rendezvous_allocate_total"), 11);
+    // 11 creates + 1 metrics fetch.
+    assert_eq!(metric_value(&text, "my_croc_rendezvous_requests_total"), 12);
+}
