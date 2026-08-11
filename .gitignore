@@ -7,3 +7,6 @@
 # bridge crate + cargokit artifacts by flutter/.gitignore
 # opencode internal state (run-continuation is session bookkeeping, not source)
 .omo/run-continuation/
+# Android release signing secrets - keystore + key.properties must NEVER be committed
+*.jks
+key.properties

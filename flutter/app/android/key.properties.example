@@ -1,0 +1,26 @@
+# Android release signing configuration template.
+#
+# COPY this file to key.properties (same directory) and fill in the real
+# values to sign release builds with the production keystore. The real
+# key.properties is gitignored (flutter/app/android/.gitignore line 12) and
+# must NEVER be committed - it contains signing secrets. This template is the
+# only signing-related file that lives in the repo.
+#
+# The keystore itself lives OUTSIDE the repo at a private path on the build
+# host (e.g. /home/<user>/.android-my-croc/worddrop-release.jks) and is
+# generated once with:
+#   keytool -genkeypair -v -keystore <path>/worddrop-release.jks -alias worddrop \
+#     -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=WordDrop, O=WordDrop"
+#
+# When key.properties is absent, build.gradle.kts falls back to signing the
+# release build with the debug key and prints a WARNING - this keeps CI and
+# fresh checkouts building (CI has no keystore by design, zero secrets).
+#
+# Generate a strong password (e.g. `openssl rand -base64 24`), use it for
+# BOTH storePassword and keyPassword, and set file permissions to 600:
+#   chmod 600 key.properties
+
+storeFile=/path/to/worddrop-release.jks
+storePassword=CHANGE_ME
+keyAlias=worddrop
+keyPassword=CHANGE_ME
