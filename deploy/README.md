@@ -24,32 +24,67 @@ cd deploy
 docker compose up -d --build
 ```
 
-默认是 **dev 模式**：relay 以 `--dev` 跑纯 HTTP（端口 3340），rendezvous 监听 8080。
+默认是 **生产模式**：relay 以 `--config-path /etc/iroh-relay/relay.toml` 跑纯 HTTP
+（容器内 :80，完整协议含 /relay WebSocket 与 "Iroh Relay" 页面，**无 [tls] 段**）；
+Caddy 独占宿主机 80/443 TCP，以**自己的** Let's Encrypt 证书终结两个域名的 TLS
+（证书持久化在 `caddy-data` 卷，重建容器不丢），并把 `pair.worddrop.cloud` 反代到
+rendezvous :8080、`relay.worddrop.cloud`（含 WebSocket）反代到 relay :80。
+`iroh-relay-dev` 服务保留 LAN dev 路径（`--dev`，宿主机 3340）。
+
+**启动前先做宿主机端口预检**（宿主机进程占用 3340/9090 时 compose 会报
+"port is already allocated"；这些通常是早期 e2e 测试遗留的 dev relay）：
+
+```sh
+ss -tlnp | grep -E ':3340|:9090|:8080'
+# 若看到宿主进程（非容器）占用 3340/9090：
+kill <pid>          # 或 systemctl stop iroh-relay
+ss -tlnp | grep -E ':3340|:9090'   # 确认已释放后再 up
+```
+
 启动后验证：
 
 ```sh
-curl -f http://127.0.0.1:3340/        # relay 返回 "Iroh Relay" 页面
+curl -f http://127.0.0.1:3340/        # LAN dev relay 返回 "Iroh Relay" 页面
 curl -f http://127.0.0.1:8080/health  # rendezvous 返回 ok
-docker compose ps                      # 两个容器 Up (healthy)
+docker compose ps                      # 四个容器 Up (healthy)：relay/rendezvous/caddy/relay-dev
+```
+
+公网生产验证（需要 80/443 已在防火墙放行，见 §3）：
+
+```sh
+curl -fsSL https://relay.worddrop.cloud/          # "Iroh Relay" 页面（Caddy 终结 TLS）
+curl -fsSL https://pair.worddrop.cloud/health     # ok
+docker exec my-croc-caddy ls /data/caddy/certificates/   # 两个域名的 LE 证书已持久化
 ```
 
 重启策略 `restart: unless-stopped`：容器崩溃/机器重启后自动拉起。
 
-客户端指向自托管服务（两端都要设置）：
+客户端指向生产服务（两端都要设置）：
+
+```sh
+export MY_CROC_RENDEZVOUS_URL=https://pair.worddrop.cloud
+export MY_CROC_RELAY_URL=https://relay.worddrop.cloud
+```
+
+LAN/dev 客户端指向宿主机：
 
 ```sh
 export MY_CROC_RENDEZVOUS_URL=http://<服务器IP>:8080
-export MY_CROC_RELAY_URL=http://<服务器IP>:3340        # dev 模式是 http
+export MY_CROC_RELAY_URL=http://<服务器IP>:3340        # iroh-relay-dev（--dev 模式）
 ```
 
-### 生产模式（Compose 下启用 TLS）
+### 生产模式说明（Compose 即生产）
 
-1. 准备 `deploy/iroh-relay/relay.toml`（复制 `deploy/iroh-relay.prod.toml` 并填写域名/邮箱），
-   并把证书放进 `deploy/iroh-relay/`（compose 已把该目录只读挂载到 `/etc/iroh-relay`）。
-2. 修改 `docker-compose.yml` 中 `iroh-relay` 服务的 `command` 为
-   `["--config-path", "/etc/iroh-relay/relay.toml"]`，取消 443/7842 端口映射注释。
-3. relay 是 QUIC/UDP 服务，HTTPS 由 iroh-relay **自己**提供（443 + UDP 7842）；
-   rendezvous 是普通 HTTP，生产请放 Caddy/nginx 后面做 HTTPS 反代（见 §4）。
+`deploy/iroh-relay/relay.toml` 随仓库提供并只读挂载到 `/etc/iroh-relay`——**只有
+`http_bind_addr = "0.0.0.0:80"`，没有 [tls] 段、没有证书目录**。TLS 全部由 Caddy 终结：
+
+- relay 以纯 HTTP 跑完整协议（含 /relay WebSocket 与 "Iroh Relay" 页面）在 :80；
+  Caddy 把 `relay.worddrop.cloud`（含 WebSocket /relay）反代到 `iroh-relay:80`。
+- 为什么 relay 不自带 TLS：iroh-relay 1.0.3 的 [tls] 段会让 :80 变成只返回 404 的
+  captive portal，完整协议移到内部 :443；而它内置的 ACME（tokio-rustls-acme 0.9.1）
+  只支持 TLS-ALPN-01（无 HTTP-01），在 Caddy 独占 443 时无法完成签发（详见 §4）。
+- 无 UDP 端口：QUIC 地址发现（UDP 7842）需要 relay TLS，按设计关闭。
+- 证书持久化：LE 证书存在 `caddy-data` 卷（重建容器不丢——修复了旧方案的证书丢失问题）。
 
 ---
 
@@ -76,7 +111,10 @@ systemctl status my-croc-rendezvous iroh-relay
 ```
 
 两个 unit 均为 `Restart=always` + 最小权限硬化（`ProtectSystem=strict`、
-`PrivateTmp`、专用用户）。日志：`journalctl -u iroh-relay -f`。
+`PrivateTmp`、专用用户）。`iroh-relay.service` 带 `AmbientCapabilities=CAP_NET_BIND_SERVICE`
+（以非 root 的 iroh-relay 用户绑定 :80），配置文件 `iroh-relay.prod.toml` 是纯 HTTP
+模板（只有 `http_bind_addr = "0.0.0.0:80"`，无 [tls]、无证书目录）——裸机路径同样
+由 Caddy 在前端终结 TLS。日志：`journalctl -u iroh-relay -f`。
 
 ---
 

@@ -1,49 +1,28 @@
-# iroh-relay 1.0.3 production configuration template.
+# iroh-relay production configuration (systemd / bare-metal path).
 #
-# Copy to /etc/iroh-relay/relay.toml on the VPS and fill in the values.
-# The relay serves HTTPS on 443 and QUIC (relay address discovery) on UDP 7842.
-# Clients then use https://relay.example.com as their relay URL — the iroh
-# client verifies the cert against Mozilla's bundled webpki roots, so the cert
-# MUST come from a public CA (Let's Encrypt below, or Manual mode with a
-# CA-issued cert). Self-signed certs CANNOT be trusted by stock iroh clients
-# (no custom-CA/disable-verify API in iroh 1.0.3) — see deploy/README.md.
+# Copy to /etc/iroh-relay/relay.toml on the VPS. The relay serves the FULL
+# protocol (incl. /relay WebSocket + "Iroh Relay" page) on plain HTTP :80 —
+# deliberately WITHOUT a [tls] section.
 #
-# NOTE: never commit real certificates/keys to the repo; this is a template only.
+# WHY: with a [tls] section the relay binds its full protocol server to the
+# internal https_bind_addr (:443) and :80 serves only a 404 captive portal,
+# while its built-in ACME (tokio-rustls-acme 0.9.1) supports ONLY TLS-ALPN-01
+# (no HTTP-01) — so relay-side Let's Encrypt cannot complete when host 80/443
+# TCP is owned by Caddy. Instead Caddy (sole host owner of 80/443 TCP and sole
+# cert issuer) terminates TLS for both domains with its own LE certs and
+# reverse-proxies relay.worddrop.cloud (incl. WebSocket /relay) to this plain
+# HTTP :80. Clients dial wss://relay.worddrop.cloud/relay on TCP 443 and
+# validate Caddy's PUBLIC certs against stock webpki roots.
+#
+# NOTE: never commit real certificates/keys to the repo; with this design the
+# relay holds no certs at all — they live in Caddy's caddy-data volume.
 
-# Relay HTTP server address. With TLS configured below, the HTTP socket only
-# serves the captive portal; all real relay services move to HTTPS.
-# http_bind_addr = "[::]:80"        # default when unset
+# Relay HTTP server address (full protocol server — plain HTTP, no TLS).
+http_bind_addr = "0.0.0.0:80"
 
-[tls]
-# --- Option A: Let's Encrypt (recommended) -------------------------------
-# iroh-relay runs the ACME flow itself (tokio-rustls-acme). Requires a public
-# hostname and the relay reachable from the internet on 443/80.
-cert_mode = "LetsEncrypt"
-hostname = ["relay.example.com"]       # replace with your domain
-contact = "admin@example.com"          # ACME account email (required)
-prod_tls = true                        # true = LE production, false = staging
-cert_dir = "/var/lib/iroh-relay"       # ACME cache dir (must be writable)
-
-# --- Option B: Manual certificates ---------------------------------------
-# Use with a cert issued by any public CA (e.g. via certbot --standalone,
-# or a cert obtained elsewhere and copied in). Place the files so the
-# service user can read them.
-# cert_mode = "Manual"
-# https_bind_addr = "[::]:443"         # default when unset
-# quic_bind_addr = "[::]:7842"         # default when unset
-# cert_dir = "/etc/iroh-relay"
-# manual_cert_path = "/etc/iroh-relay/default.crt"
-# manual_key_path = "/etc/iroh-relay/default.key"
-
-# QUIC address discovery: lets iroh clients learn their observed address via
-# QUIC on UDP 7842 (helps NAT hole-punching). Requires TLS. Optional.
-# enable_quic_addr_discovery = true
-
-# --- Access control (optional) -------------------------------------------
-# Restrict relaying to a bearer token shared by your clients:
-#   iroh clients would send `Authorization: Bearer <token>` — my-croc does
-#   not set this header, so enabling this REQUIRES a patched client.
-# access.shared_token = ["change-me"]
+# --- Metrics --------------------------------------------------------------
+# metrics server binds [::]:9090 by default; disable if you don't use it:
+# enable_metrics = false
 
 # --- Rate limiting (optional) --------------------------------------------
 # [limits]
@@ -52,6 +31,8 @@ cert_dir = "/var/lib/iroh-relay"       # ACME cache dir (must be writable)
 # [limits.client.rx]
 # bytes_per_second = 1_000_000
 
-# --- Metrics --------------------------------------------------------------
-# metrics server binds [::]:9090 by default; disable if you don't use it:
-# enable_metrics = false
+# --- Access control (optional) -------------------------------------------
+# Restrict relaying to a bearer token shared by your clients:
+#   iroh clients would send `Authorization: Bearer <token>` — my-croc does
+#   not set this header, so enabling this REQUIRES a patched client.
+# access.shared_token = ["change-me"]

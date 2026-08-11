@@ -1,0 +1,11 @@
+# iroh-relay production runtime config (bind-mount target of the compose
+# relay service: ./iroh-relay:/etc/iroh-relay:ro).
+#
+# NO [tls] section BY DESIGN: with a [tls] section the relay binds its full
+# protocol server to internal :443 and :80 becomes a 404 captive portal, and
+# its built-in ACME (tokio-rustls-acme 0.9.1) supports only TLS-ALPN-01 — so
+# relay-side Let's Encrypt cannot work behind Caddy, which owns host 80/443.
+# Without [tls] the relay serves the FULL protocol (incl. /relay WebSocket
+# + "Iroh Relay" page) on plain HTTP :80; Caddy terminates TLS for both
+# worddrop.cloud domains and reverse-proxies (WebSocket included) here.
+http_bind_addr = "0.0.0.0:80"

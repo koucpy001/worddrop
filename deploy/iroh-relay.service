@@ -1,19 +1,23 @@
-# iroh-relay 1.0.3 — iroh's relay server (QUIC + HTTP/WS proxying).
+# iroh-relay 1.0.3 — iroh's relay server (HTTP/WS proxying).
 #
 # TLS is NOT configured with CLI flags in 1.0.3: it lives in the TOML config
-# file passed via --config-path (see deploy/README.md "TLS story"). The unit
-# below uses the production config template; swap in `--dev` + port 3340 for
-# a plain-HTTP local install.
+# file passed via --config-path. This unit runs the relay in production shape:
+# plain HTTP on :80 serving the FULL protocol (incl. /relay WebSocket) — NO
+# [tls] section, so no cert_dir and no TLS/QUIC of its own. TLS termination
+# for both worddrop.cloud domains is done by Caddy (sole host owner of
+# 80/443 TCP), which reverse-proxies relay.worddrop.cloud to this :80.
+# (Relay-side Let's Encrypt is impossible behind Caddy: tokio-rustls-acme
+# 0.9.1 supports only TLS-ALPN-01, and with a [tls] section :80 would serve
+# just a 404 captive portal — see deploy/README.md.)
 #
 # Install on the VPS:
 #   sudo useradd --system --home /var/lib/iroh-relay --shell /usr/sbin/nologin iroh-relay
 #   sudo install -m 0755 iroh-relay /usr/local/bin/
 #   sudo install -d -o iroh-relay -g iroh-relay /etc/iroh-relay
-#   sudo install -m 0644 iroh-relay.prod.toml /etc/iroh-relay/relay.toml
-#   # (LetsEncrypt mode writes its cert cache to /var/lib/iroh-relay — the
-#   #  User's home; Manual mode reads /etc/iroh-relay/default.crt|.key)
+#   sudo install -m 0640 -o iroh-relay -g iroh-relay iroh-relay.prod.toml /etc/iroh-relay/relay.toml
 #   sudo install -m 0644 iroh-relay.service /etc/systemd/system/
 #   sudo systemctl daemon-reload && sudo systemctl enable --now iroh-relay
+# (For a plain-HTTP local install instead, run `iroh-relay --dev` on port 3340.)
 
 [Unit]
 Description=iroh relay server (my-croc transport fallback)
@@ -24,8 +28,11 @@ Wants=network-online.target
 Type=simple
 User=iroh-relay
 Group=iroh-relay
-# Production: TLS from /etc/iroh-relay/relay.toml (HTTPS 443 + QUIC UDP 7842).
+# Production: plain-HTTP relay from /etc/iroh-relay/relay.toml (binds :80;
+# TLS is terminated by Caddy in front of it).
 ExecStart=/usr/local/bin/iroh-relay --config-path /etc/iroh-relay/relay.toml
+# Bind :80 (<1024) as the non-root iroh-relay user.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 Restart=always
 RestartSec=5
 # Hardening
@@ -33,7 +40,6 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/iroh-relay
 
 [Install]
 WantedBy=multi-user.target

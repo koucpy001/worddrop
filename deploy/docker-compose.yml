@@ -1,14 +1,27 @@
-# my-croc self-hosted infrastructure: iroh-relay + my-croc-rendezvous.
+# my-croc self-hosted infrastructure: iroh-relay + my-croc-rendezvous + Caddy.
 #
-# Default profile runs iroh-relay in --dev mode (plain HTTP on 3340) — the
-# same mode the whole project's local smoke/e2e tests use. For production TLS
-# see deploy/README.md (TLS story): switch the relay command to
-# `--config-path /etc/iroh-relay/relay.toml` (LetsEncrypt or manual cert) and
-# terminate rendezvous HTTPS with Caddy/nginx, or put both behind a reverse proxy.
+# PRODUCTION mode by default: the relay runs plain HTTP on :80 serving the
+# FULL protocol (incl. /relay WebSocket) — deliberately NO [tls] section
+# (relay-side Let's Encrypt is TLS-ALPN-01-only and cannot work behind Caddy).
+# Caddy is the SOLE host owner of 80/443 TCP for both worddrop.cloud domains
+# and the sole cert issuer: it terminates TLS with its own Let's Encrypt
+# certs (persisted in the caddy-data volume — certs survive container
+# recreate) and reverse-proxies pair.worddrop.cloud -> my-croc-rendezvous:8080
+# and relay.worddrop.cloud (incl. WebSocket /relay) -> iroh-relay:80.
 #
-# Host ports are fixed at the documented defaults (3340 relay / 8080
-# rendezvous / 9090 relay metrics). If the host already runs services on
-# these ports, stop them or adjust the left-hand side.
+# iroh-relay-dev keeps the LAN dev path alive: same image in --dev mode on
+# host 3340 (plain HTTP) — required by the T8 Android LAN checklist.
+#
+# HOST-PORT PRE-FLIGHT (before `docker compose up -d`):
+#   ss -tlnp | grep -E ':3340|:9090|:8080'
+# Host processes (not containers) holding 3340/9090 must be stopped first —
+# e.g. leftover dev relays from earlier e2e testing:
+#   kill <pid>        # or: systemctl stop iroh-relay
+# then re-check. Do NOT start the stack while host 3340/9090 are occupied
+# (compose fails with "port is already allocated").
+#
+# Host ports are fixed at the documented defaults (80/443 Caddy / 8080
+# rendezvous / 3340 dev relay / 9090 relay metrics).
 
 name: my-croc
 
@@ -26,23 +39,23 @@ services:
         APT_MIRROR: "${MY_CROC_APT_MIRROR:-}"
         CARGO_REGISTRY: "${MY_CROC_CARGO_REGISTRY:-}"
         CARGO_BUILD_JOBS: "${MY_CROC_CARGO_JOBS:-2}"
-    image: my-croc/iroh-relay:1.0.3
+    image: my-croc/iroh-relay:0.2.0
     container_name: my-croc-iroh-relay
     restart: unless-stopped
-    command: ["--dev"]
+    # Production: plain-HTTP full protocol server on :80 (no [tls], no
+    # cert_dir). Do NOT publish 443 — Caddy owns it; no UDP ports (QUIC
+    # address discovery is off — requires relay TLS, absent by design).
+    command: ["--config-path", "/etc/iroh-relay/relay.toml"]
     ports:
-      - "3340:3340"        # HTTP relay (--dev mode)
-      # Production TLS (uncomment + switch command to --config-path):
-      # - "443:443"        # HTTPS relay
-      # - "7842:7842/udp"  # QUIC relay (relay QUIC address discovery)
       - "9090:9090"        # relay metrics (optional)
     volumes:
-      # Production TLS: mount a directory with relay.toml + certs read-only,
-      # e.g. ./iroh-relay/:/etc/iroh-relay/:ro (see deploy/README.md).
+      # Runtime config (relay.toml); no cert volume — certs live in Caddy's
+      # caddy-data volume instead.
       - ./iroh-relay:/etc/iroh-relay:ro
     healthcheck:
-      # --dev serves the relay web page on GET /; prod HTTPS serves it on 443.
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3340/"]
+      # The plain-HTTP full protocol server serves the "Iroh Relay" page on
+      # GET / (no [tls] => :80 is NOT a 404 captive portal).
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:80/"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -60,7 +73,7 @@ services:
       args:
         APT_MIRROR: "${MY_CROC_APT_MIRROR:-}"
         CARGO_REGISTRY: "${MY_CROC_CARGO_REGISTRY:-}"
-    image: my-croc/rendezvous:0.1.0
+    image: my-croc/rendezvous:0.2.0
     container_name: my-croc-rendezvous
     restart: unless-stopped
     environment:
@@ -68,6 +81,8 @@ services:
       MY_CROC_RENDEZVOUS_ADDR: "0.0.0.0:8080"
       # Optional: RUST_LOG=my_croc_rendezvous=info
     ports:
+      # Kept published: the LAN dev path (and T8's LAN step) uses host
+      # http://<host>:8080 directly. Public access is TLS-terminated by Caddy.
       - "8080:8080"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
@@ -80,3 +95,70 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  caddy:
+    image: caddy:2
+    container_name: my-croc-caddy
+    restart: unless-stopped
+    # Sole host owner of 80/443 TCP + sole cert issuer for BOTH domains
+    # (Caddy auto-HTTPS, LE certs via HTTP-01 on :80 which Caddy owns).
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data       # LE certs persist across recreates (cert-loss fix)
+      - caddy-config:/config
+    depends_on:
+      my-croc-rendezvous:
+        condition: service_healthy
+      iroh-relay:
+        condition: service_started
+    healthcheck:
+      # Probe /health, NOT /: the rendezvous router has no / route (only
+      # /health + /v1/pairs*), so / returns axum 404 -> curl -f exit 22 ->
+      # unhealthy forever. The Host header routes Caddy's own request through
+      # the pair site block to my-croc-rendezvous:8080/health ("ok").
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/health", "-H", "Host: pair.worddrop.cloud"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  iroh-relay-dev:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.iroh-relay
+      args:
+        APT_MIRROR: "${MY_CROC_APT_MIRROR:-}"
+        CARGO_REGISTRY: "${MY_CROC_CARGO_REGISTRY:-}"
+        CARGO_BUILD_JOBS: "${MY_CROC_CARGO_JOBS:-2}"
+    image: my-croc/iroh-relay:0.2.0
+    container_name: my-croc-iroh-relay-dev
+    restart: unless-stopped
+    # LAN dev relay: same image, --dev mode (plain HTTP on 3340). The SOLE
+    # LAN path after the prod relay moved to :80 behind Caddy (T1).
+    command: ["--dev"]
+    ports:
+      - "3340:3340"        # HTTP relay (--dev mode)
+    healthcheck:
+      # --dev serves the relay web page on GET /.
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3340/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  caddy-data:
+  caddy-config:
