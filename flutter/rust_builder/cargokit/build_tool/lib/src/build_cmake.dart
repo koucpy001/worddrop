@@ -30,10 +30,15 @@ class BuildCMake {
 
     final libs = artifacts[target]!;
 
+    // The CMake `$<CONFIG>` output directory may not exist yet when this
+    // custom command runs ahead of the runner target that creates it (seen
+    // on Windows/MSBuild, where copySync then throws PathNotFoundException).
+    final outputDir = path.join(Environment.outputDir);
+    Directory(outputDir).createSync(recursive: true);
+
     for (final lib in libs) {
       if (lib.type == AritifactType.dylib) {
-        File(lib.path)
-            .copySync(path.join(Environment.outputDir, lib.finalFileName));
+        File(lib.path).copySync(path.join(outputDir, lib.finalFileName));
       }
     }
   }
