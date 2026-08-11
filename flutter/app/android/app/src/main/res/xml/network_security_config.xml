@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cleartext is required for LAN self-host servers (http://<LAN-IP>:8080/3340).
+     Android's network security config cannot express IP ranges (RFC1918), so a
+     global base-config is the only way LAN-IP self-host works. Public URLs must
+     use https (worddrop.cloud) - cleartext is for the LAN path only. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true"/>
+</network-security-config>
