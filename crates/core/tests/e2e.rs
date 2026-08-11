@@ -281,10 +281,14 @@ async fn sender_engine(
 
 /// Wait until the endpoint has contacted the relay; fail loudly after a
 /// generous bound (a relay-less hang is worse than a clear failure).
+///
+/// 30s matches [`RELAY_START_TIMEOUT`]: on slow CI runners (windows) the
+/// first endpoints racing the freshly spawned relay can exceed 15s to go
+/// online (observed as flaky `endpoint must reach the local relay` panics).
 async fn wait_online(eng: &TransferEngine) {
-    timeout(Duration::from_secs(15), eng.endpoint().online())
+    timeout(Duration::from_secs(30), eng.endpoint().online())
         .await
-        .expect("endpoint must reach the local relay within 15s");
+        .expect("endpoint must reach the local relay within 30s");
 }
 
 // ============================================================================
