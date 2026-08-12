@@ -10,9 +10,10 @@
 两个服务：
 
 - **my-croc-rendezvous** — 配对信箱：`code <-> ticket`，axum HTTP 服务，`/health` 探活。
-- **iroh-relay 1.0.3** — iroh 传输中继（QUIC + HTTP/WS 代理），客户端打洞失败时走它。
+- **iroh-relay 1.0.3** — iroh 传输中继（HTTP/WS 代理；QUIC 入口按设计关闭），客户端打洞失败时走它。
 
-> 部署产物只包含配置模板，**不包含任何 TLS 证书/私钥**（证书请在你的 VPS 上生成）。
+> 部署产物只包含配置模板，**不包含任何 TLS 证书/私钥**——生产证书由 Caddy 首次启动时
+> 自动向 Let's Encrypt 申请并持久化在 `caddy-data` 卷（见 §4），无需人工生成。
 
 ---
 
@@ -56,6 +57,11 @@ curl -fsSL https://relay.worddrop.cloud/          # "Iroh Relay" 页面（Caddy 
 curl -fsSL https://pair.worddrop.cloud/health     # ok
 docker exec my-croc-caddy ls /data/caddy/certificates/   # 两个域名的 LE 证书已持久化
 ```
+
+> **本路径已实测（2026-08-12，T1/T4）**：https://relay.worddrop.cloud 返回 "Iroh Relay"
+> 页面、https://pair.worddrop.cloud/health 返回 ok、LE 证书持久化验证通过；同主机
+> CLI↔CLI 经公网 TLS 传输字节一致（同机回环说明见
+> `.omo/evidence/my-croc-prod/task-4-my-croc-prod.txt`）。
 
 重启策略 `restart: unless-stopped`：容器崩溃/机器重启后自动拉起。
 
@@ -122,20 +128,20 @@ systemctl status my-croc-rendezvous iroh-relay
 
 | 端口 | 协议 | 服务 | 说明 |
 | :--- | :--- | :--- | :--- |
-| 3340 | TCP | iroh-relay | dev 模式 HTTP relay；生产模式可不开 |
-| 80 / 443 | TCP | iroh-relay | 生产 HTTPS relay（443）；80 仅 Let's Encrypt 需要 |
-| 7842 | UDP | iroh-relay | 生产 QUIC relay（NAT 打洞地址发现） |
-| 8080 | TCP | rendezvous | 生产必须放在反代后，只对反代开放（或 127.0.0.1） |
-| 9090 | TCP | iroh-relay | metrics（可选，默认开） |
+| 80 / 443 | TCP | Caddy | **生产唯一需要放行**；Caddy 独占这两个端口终结两个域名的 TLS（80 用于 LE HTTP-01 签发，443 服务客户端的 wss/HTTPS） |
+| 3340 | TCP | iroh-relay-dev | 仅 LAN dev 路径（`--dev`），不对外网开放 |
+| 8080 | TCP | my-croc-rendezvous | 仅 LAN dev 路径；生产由 Caddy 反代，不直接暴露 |
+| 9090 | TCP | iroh-relay | 可选 dev metrics（默认发布到宿主机），不对外网开放 |
+
+**没有任何 UDP 端口**：QUIC 地址发现（UDP 7842）需要 relay 侧 TLS，按设计关闭——
+客户端的 relay 数据路径是 WebSocket-over-TLS（TCP 443），不是 QUIC/UDP。
 
 ```sh
 # ufw 示例（生产）
-sudo ufw allow 80/tcp 443/tcp 7842/udp
-sudo ufw allow 8080/tcp comment 'my-croc rendezvous (behind proxy in prod)'
+sudo ufw allow 80/tcp 443/tcp
 ```
 
-> 生产建议：**不要**把 8080 直接暴露公网。用 Caddy/nginx 反代成 HTTPS（§4），
-> 8080 只监听 127.0.0.1。
+> 生产建议：**不要**把 8080/3340/9090 直接暴露公网（仅内网/LAN 使用）。
 
 ---
 
@@ -143,49 +149,44 @@ sudo ufw allow 8080/tcp comment 'my-croc rendezvous (behind proxy in prod)'
 
 ### 为什么需要 TLS
 
-- **iroh-relay**：生产模式提供 HTTPS（443）与 QUIC（UDP 7842）两个入口。
-  iroh 客户端（my-croc 使用）把 relay 当成可信传输路径，**relay 连接默认走
-  QUIC-over-TLS**；没有有效证书，客户端无法验证 relay 身份。dev 模式
-  （`--dev`）是纯 HTTP，仅限本机/内网调试。
 - **my-croc-rendezvous**：配对信箱。生产必须 HTTPS（防止中间人篡改 code/ticket），
-  由反代（Caddy/nginx）终结 TLS。
+  由 Caddy 反代终结 TLS。
+- **iroh-relay**：客户端（my-croc 使用）把 relay 当成可信传输路径，relay 连接走
+  WebSocket-over-TLS（wss，客户端填 `https://relay...` 自动转 wss）；没有有效证书，
+  客户端无法验证 relay 身份。dev 模式（`--dev`）是纯 HTTP，仅限本机/内网调试。
 
-### 生产路径 (a)：域名 + Let's Encrypt
+### 生产路径：Caddy 终结 TLS（本仓库采用，已实测）
 
-iroh-relay 1.0.3 **没有 `--tls-cert/--tls-key` 命令行参数**——TLS 配置在
-TOML 配置文件里（`--config-path` 传入）：
+relay **不自带 TLS**——`deploy/iroh-relay/relay.toml` 只有
+`http_bind_addr = "0.0.0.0:80"`，**没有 [tls] 段**，relay 以纯 HTTP 跑完整协议
+（含 /relay WebSocket 与 "Iroh Relay" 页面）在容器内 :80。Caddy 独占宿主机
+80/443 TCP：
 
-```toml
-# /etc/iroh-relay/relay.toml
-[tls]
-cert_mode = "LetsEncrypt"     # 或 "Manual"
-hostname = ["relay.example.com"]
-contact  = "admin@example.com"
-prod_tls = true
-cert_dir = "/var/lib/iroh-relay"
-```
-
-- **LetsEncrypt 模式**：iroh-relay 自带 ACME 流程，自动申请/续期，证书缓存写在
-  `cert_dir`。
-- **Manual 模式**：用 `certbot certonly --standalone`（或任何公开 CA）拿到证书后，
-  填 `manual_cert_path` / `manual_key_path`（默认 `<cert_dir>/default.crt|.key`）。
-
-客户端（CLI / GUI）只需把 relay 地址指到 HTTPS 域名：
-
-```sh
-export MY_CROC_RELAY_URL=https://relay.example.com
-export MY_CROC_RENDEZVOUS_URL=https://rendezvous.example.com
-```
-
-iroh 客户端用内置的 Mozilla webpki roots 验证证书——**证书必须来自公开 CA**。
-
-rendezvous 的 HTTPS 用 Caddy 一行搞定（自动 HTTPS + 反代到 8080）：
+- Caddy 用**自己的** Let's Encrypt 证书终结 `relay.worddrop.cloud` 与
+  `pair.worddrop.cloud` 的 TLS（HTTP-01 走 :80——因为 Caddy 拥有 :80 才能完成
+  签发）；证书持久化在 `caddy-data` 卷，重建容器不丢。
+- `relay.worddrop.cloud`（含 WebSocket /relay，Caddy 自动处理 WS 升级）→ 反代到
+  relay 容器 :80；`pair.worddrop.cloud` → 反代到 `my-croc-rendezvous:8080`。
+- 客户端只需把地址指到 HTTPS 域名；iroh 客户端用内置的 Mozilla webpki roots
+  验证证书——**证书必须来自公开 CA**（Caddy 的 LE 证书满足）。
 
 ```caddyfile
-rendezvous.example.com {
-    reverse_proxy 127.0.0.1:8080
+relay.worddrop.cloud {
+    reverse_proxy iroh-relay:80          # 含 WebSocket /relay（Caddy 自动升级）
+}
+pair.worddrop.cloud {
+    reverse_proxy my-croc-rendezvous:8080
 }
 ```
+
+**为什么 relay 不能自带 Let's Encrypt（源码级架构事实）**：iroh-relay 1.0.3 配置
+`[tls]` 段后，:80 会退化成只返回 404 的 captive portal，完整协议移到内部
+https_bind_addr（默认 :443）；而它内置的 ACME（tokio-rustls-acme 0.9.1）只支持
+TLS-ALPN-01、**没有 HTTP-01**——在 Caddy 独占 443 的情况下，LE 对 relay 域名的
+acme-tls/1 握手会打到 Caddy 而不是 relay，签发永远无法完成。因此「relay 自带 LE +
+前端再挂 Caddy」是走不通的组合，正确架构就是上面的 Caddy 全权终结方案。
+（本仓库已按此方案在 worddrop.cloud 实测上线；旧文档里的 relay `[tls] LetsEncrypt`
+配置模板已废弃，`deploy/iroh-relay.prod.toml` 现在是纯 HTTP 模板。）
 
 ### 开发路径 (b)：本地自签名/无 TLS 的真相
 
@@ -236,7 +237,6 @@ GUI：设置页填写（与 CLI 同一份配置）。
 ## 5. 运维提示
 
 - 版本固定：iroh-relay **1.0.3**（客户端 iroh 1.0.3 与之配套）；升级需两端同步。
-- 证书续期：LetsEncrypt 模式自动；Manual 模式需自行 cron（`certbot renew` +
-  `systemctl restart iroh-relay`）。
+- 证书续期：Caddy 自动续期（LE），无需人工介入；relay 不带 [tls] 段（见 §4）。
 - relay 流量是明文转发（iroh 传输层 E2E 加密），relay 本身看不到文件内容。
 - 磁盘：relay 日志限 10MB×3（compose）/ journald（systemd）。
