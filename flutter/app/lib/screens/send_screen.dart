@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:app/backend/pairing_backend.dart';
+import 'package:app/services/transfer_history.dart';
 import 'package:app/src/rust/api/events.dart';
 import 'package:app/src/rust/api/session.dart' show PreparedSendDto, SessionRole;
 import 'package:app/theme.dart';
@@ -107,26 +108,49 @@ class _SendScreenState extends State<SendScreen> {
 
   void _onEvent(BridgeEvent event) {
     if (!mounted) return;
+    final store = TransferHistory.instance;
     switch (event.kind) {
       case 'file_imported':
         setState(() => _filesFound++);
       case 'served':
-        if (_stage != SendStage.transferring) {
-          setState(() => _stage = SendStage.transferring);
+        final prepared = _prepared;
+        if (prepared != null) {
+          if (_stage != SendStage.transferring) {
+            setState(() => _stage = SendStage.transferring);
+            // First serving event: register the live transfer so the
+            // transfers screen shows an active card with a cancel button.
+            store.addActive(ActiveTransfer(
+              code: prepared.code,
+              names: prepared.files.map((f) => f.name).toList(),
+              totalBytes: prepared.totalBytes,
+              direction: 'sent',
+              startTime: DateTime.now(),
+              onCancel: _cancel,
+            ));
+          }
+          store.updateProgress(
+              prepared.code, event.received ?? BigInt.zero, event.total);
         }
         setState(() {
           _received = event.received;
           _total = event.total;
         });
       case 'done':
+        final prepared = _prepared;
+        if (prepared != null) store.completeTransfer(prepared.code);
         setState(() => _stage = SendStage.done);
       case 'phase':
+        final prepared = _prepared;
         if (event.phase == 'cancelled') {
+          if (prepared != null) store.cancelTransfer(prepared.code);
           setState(() => _stage = SendStage.cancelled);
         } else if (event.phase == 'done') {
+          if (prepared != null) store.completeTransfer(prepared.code);
           setState(() => _stage = SendStage.done);
         }
       case 'error':
+        final prepared = _prepared;
+        if (prepared != null) store.failTransfer(prepared.code);
         setState(() {
           _stage = SendStage.failed;
           _error = '传输失败: ${event.message ?? '未知错误'}';
@@ -141,6 +165,11 @@ class _SendScreenState extends State<SendScreen> {
       await _backend?.cancelSession();
     } catch (_) {
       // Event stream carries the phase anyway; ignore late failures.
+    }
+    // Record the cancellation even if the phase event is lost.
+    final prepared = _prepared;
+    if (prepared != null) {
+      await TransferHistory.instance.cancelTransfer(prepared.code);
     }
     if (mounted) setState(() => _stage = SendStage.cancelled);
   }

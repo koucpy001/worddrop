@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:app/backend/pairing_backend.dart';
+import 'package:app/services/transfer_history.dart';
 import 'package:app/src/rust/api/events.dart';
 import 'package:app/src/rust/api/session.dart' show OfferDto, SessionRole;
 import 'package:app/theme.dart';
@@ -36,6 +37,8 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   String? _error;
   String? _formError;
   bool _connecting = false;
+  /// The claimed pairing code — the in-memory key of the active transfer.
+  String? _code;
 
   @override
   void dispose() {
@@ -73,6 +76,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       final backend = await _ensureBackend();
       final offer = await backend.claimCode(code.display);
       if (!mounted) return;
+      _code = code.display;
       setState(() {
         _connecting = false;
         _stage = ReceiveStage.connecting; // still awaiting user decision
@@ -92,6 +96,19 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     final accepted = await showOfferDialog(context, offer);
     if (!mounted) return;
     if (accepted) {
+      final code = _code;
+      if (code != null) {
+        // Accepting starts the download: register the live transfer so the
+        // transfers screen shows an active card (cancel cancels the session).
+        TransferHistory.instance.addActive(ActiveTransfer(
+          code: code,
+          names: offer.files.map((f) => f.name).toList(),
+          totalBytes: offer.totalBytes,
+          direction: 'received',
+          startTime: DateTime.now(),
+          onCancel: _cancel,
+        ));
+      }
       setState(() => _stage = ReceiveStage.transferring);
       try {
         await _backend?.acceptOffer(); // empty targetDir -> received/ subdir
@@ -115,8 +132,14 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
 
   void _onEvent(BridgeEvent event) {
     if (!mounted) return;
+    final store = TransferHistory.instance;
+    final code = _code;
     switch (event.kind) {
       case 'downloading':
+        if (code != null) {
+          store.updateProgress(
+              code, event.received ?? BigInt.zero, event.total);
+        }
         setState(() {
           _received = event.received;
           _total = event.total;
@@ -124,14 +147,18 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       case 'exporting':
         setState(() => _exportingName = event.name);
       case 'done':
+        if (code != null) store.completeTransfer(code);
         setState(() => _stage = ReceiveStage.done);
       case 'phase':
         if (event.phase == 'cancelled') {
+          if (code != null) store.cancelTransfer(code);
           setState(() => _stage = ReceiveStage.cancelled);
         } else if (event.phase == 'done') {
+          if (code != null) store.completeTransfer(code);
           setState(() => _stage = ReceiveStage.done);
         }
       case 'error':
+        if (code != null) store.failTransfer(code);
         setState(() {
           _stage = ReceiveStage.failed;
           _error = '传输失败: ${event.message ?? '未知错误'}';
@@ -139,6 +166,21 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       default:
         break;
     }
+  }
+
+  /// Cancel the session and record the cancellation in history. Wired both
+  /// to the transfers-screen active card and to the phase-cancelled event.
+  Future<void> _cancel() async {
+    try {
+      await _backend?.cancelSession();
+    } catch (_) {
+      // Event stream carries the phase anyway; ignore late failures.
+    }
+    final code = _code;
+    if (code != null) {
+      await TransferHistory.instance.cancelTransfer(code);
+    }
+    if (mounted) setState(() => _stage = ReceiveStage.cancelled);
   }
 
   @override
