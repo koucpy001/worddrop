@@ -12,10 +12,10 @@ use std::time::Duration;
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Method, Request, StatusCode, header};
-use worddrop_rendezvous::{ACCESS_LIMIT_PER_MINUTE, AppState, CREATE_LIMIT_PER_MINUTE, app};
 use serde::Deserialize;
 use serde_json::Value;
 use tower::ServiceExt;
+use worddrop_rendezvous::{ACCESS_LIMIT_PER_MINUTE, AppState, CREATE_LIMIT_PER_MINUTE, app};
 
 fn ip_a() -> SocketAddr {
     SocketAddr::from(([127, 0, 0, 1], 4000))
@@ -579,7 +579,13 @@ async fn rate_limited_requests_increment_rate_limited_counter() {
         metric_value(&text, "worddrop_rendezvous_rate_limited_total"),
         1
     );
-    assert_eq!(metric_value(&text, "worddrop_rendezvous_allocate_total"), 11);
+    assert_eq!(
+        metric_value(&text, "worddrop_rendezvous_allocate_total"),
+        11
+    );
     // 11 creates + 1 metrics fetch.
-    assert_eq!(metric_value(&text, "worddrop_rendezvous_requests_total"), 12);
+    assert_eq!(
+        metric_value(&text, "worddrop_rendezvous_requests_total"),
+        12
+    );
 }

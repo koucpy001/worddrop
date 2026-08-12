@@ -14,8 +14,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use worddrop_core::identity;
 use serde::{Deserialize, Serialize};
+use worddrop_core::identity;
 
 /// File name of the TOML config inside the config dir.
 pub const CONFIG_FILE: &str = "config.toml";

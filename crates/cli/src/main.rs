@@ -4,9 +4,9 @@
 use std::process::ExitCode;
 
 use clap::Parser;
+use tracing_subscriber::EnvFilter;
 use worddrop_cli::cli::Cli;
 use worddrop_cli::commands;
-use tracing_subscriber::EnvFilter;
 
 fn main() -> ExitCode {
     worddrop_core::transfer::engine::install_tls_provider();

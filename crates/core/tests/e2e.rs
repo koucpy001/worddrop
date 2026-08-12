@@ -34,6 +34,11 @@ use iroh::endpoint::Connection;
 use iroh::protocol::{AcceptError, DynProtocolHandler, ProtocolHandler};
 use iroh::{RelayMode, RelayUrl};
 use iroh_blobs::ticket::BlobTicket;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::net::TcpStream;
+use tokio::sync::{OnceCell, mpsc};
+use tokio::task::JoinHandle;
+use tokio::time::timeout;
 use worddrop_core::pairing::handshake::HandshakeMessage;
 use worddrop_core::pairing::spake::{SessionKey, SpakeError, SpakeSession};
 use worddrop_core::pairing::wordcode::{WordCode, WordCodeError};
@@ -50,11 +55,6 @@ use worddrop_core::transfer::receive::{
     ReceiveError, ReceiveOptions, ReceiveProgress, TransferResult,
 };
 use worddrop_core::transfer::send::{ProgressEvent, SendError};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::net::TcpStream;
-use tokio::sync::{OnceCell, mpsc};
-use tokio::task::JoinHandle;
-use tokio::time::timeout;
 
 // ============================================================================
 //  Constants
