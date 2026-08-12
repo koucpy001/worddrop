@@ -121,17 +121,27 @@ my-croc receive --code 7-correct-horse-battery --output ~/Downloads
 ### 配置（自托管服务地址）
 
 客户端默认指向本机（`http://127.0.0.1:8080` rendezvous + `http://127.0.0.1:3340` relay）。
-使用自托管服务时，两端都要设置。两种方式：环境变量（优先级最高）或配置文件：
+使用自托管服务时，两端都要设置。两种方式：环境变量（优先级最高）或配置文件。
+生产（公网 TLS，worddrop.cloud）与开发（LAN，http）用同一套机制，仅地址不同。
+
+**生产（worddrop.cloud，公网 TLS）**：
 
 ```sh
 # 方式一：环境变量
-export MY_CROC_RENDEZVOUS_URL=http://<host>:8080
-export MY_CROC_RELAY_URL=http://<host>:3340
+export MY_CROC_RENDEZVOUS_URL=https://pair.worddrop.cloud
+export MY_CROC_RELAY_URL=https://relay.worddrop.cloud
 
 # 方式二：配置文件（config.toml，保存在配置目录）
-my-croc config set rendezvous_url http://<host>:8080
-my-croc config set relay_url http://<host>:3340
+my-croc config set rendezvous_url https://pair.worddrop.cloud
+my-croc config set relay_url https://relay.worddrop.cloud
 my-croc config get          # 查看生效配置（env > file > default）
+```
+
+**开发 / 局域网（LAN dev 路径）**：
+
+```sh
+export MY_CROC_RENDEZVOUS_URL=http://<host>:8080
+export MY_CROC_RELAY_URL=http://<host>:3340
 ```
 
 | 配置项 | 环境变量 | 默认值 |
@@ -141,7 +151,8 @@ my-croc config get          # 查看生效配置（env > file > default）
 | 数据目录 | `MY_CROC_DATA_DIR` | 配置目录（按 send/receive 角色分子目录） |
 | 配置目录 | `MY_CROC_CONFIG_DIR` | 平台默认配置目录 |
 
-GUI：设置页（设置 tab）填写 rendezvous / relay 地址，与 CLI 同一份配置。
+GUI：设置页（设置 tab）填写 rendezvous / relay 地址，与 CLI 同一份配置（填上面的
+生产或开发地址均可）。
 
 ### GUI（Flutter）
 

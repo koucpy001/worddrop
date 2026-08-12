@@ -208,13 +208,28 @@ rendezvous.example.com {
 
 ### 客户端服务地址配置
 
+生产（公网 TLS，worddrop.cloud；两端都要设置，CLI 与 GUI 通用）：
+
+```sh
+# 方式一：环境变量
+export MY_CROC_RENDEZVOUS_URL=https://pair.worddrop.cloud
+export MY_CROC_RELAY_URL=https://relay.worddrop.cloud
+
+# 方式二：配置文件（config.toml；env > file > default）
+my-croc config set rendezvous_url https://pair.worddrop.cloud
+my-croc config set relay_url https://relay.worddrop.cloud
+my-croc config get
+```
+
+开发 / 局域网（LAN dev 路径）：`http://<服务器IP>:8080`（rendezvous）+
+`http://<服务器IP>:3340`（iroh-relay-dev，`--dev` 模式），见 §1 的 LAN/dev 示例。
+
 | 配置项 | 环境变量 | 配置文件（`my-croc config set`） |
 | :--- | :--- | :--- |
 | rendezvous | `MY_CROC_RENDEZVOUS_URL` | `rendezvous_url` |
 | relay | `MY_CROC_RELAY_URL` | `relay_url` |
 
-CLI：`my-croc config set relay_url https://relay.example.com` 或导出环境变量。
-GUI：设置页填写。
+GUI：设置页填写（与 CLI 同一份配置）。
 
 ---
 
