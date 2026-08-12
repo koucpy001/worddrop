@@ -2298,12 +2298,16 @@ dependencies = [
  "my-croc-core",
  "my-croc-rendezvous",
  "rand 0.9.5",
+ "rustls",
  "serde",
  "serde_json",
  "tokio",
+ "tokio-rustls",
  "toml",
  "tracing",
  "tracing-subscriber",
+ "url",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -2317,6 +2321,7 @@ dependencies = [
  "my-croc-rendezvous",
  "n0-future",
  "rand 0.9.5",
+ "rustls",
  "serde",
  "serde_json",
  "sha2 0.10.9",

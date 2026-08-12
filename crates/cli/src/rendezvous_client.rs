@@ -8,15 +8,30 @@
 //! run. Timeouts are built in: a dead server surfaces in [`REQUEST_TIMEOUT`],
 //! never a hang.
 //!
+//! T4: `https` origins are supported — the plaintext socket is wrapped in
+//! rustls (stock webpki roots, same trust policy as iroh: no custom CA, no
+//! verification weakening) and the port defaults per scheme (80/443), so
+//! `https://pair.worddrop.cloud` works as-is against a TLS-terminating
+//! reverse proxy (Caddy).
+//!
 //! SECURITY (F1): only the ticket goes to the server on `allocate`; the
 //! word-code secret words never leave the client, so this module has no API
 //! to send them.
 
-use std::{fmt, io, time::Duration};
+use std::{
+    fmt, io,
+    sync::{Arc, OnceLock},
+    time::Duration,
+};
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use rustls::pki_types::ServerName;
+use rustls::{ClientConfig, RootCertStore};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
+use tokio_rustls::TlsConnector;
+use tokio_rustls::client::TlsStream;
+use url::Url;
 
 use serde::Deserialize;
 
@@ -61,6 +76,10 @@ pub enum RvError {
     Http { status: u16, body: String },
     /// Transport-level failure (connect refused, reset, ...).
     Io(io::Error),
+    /// The rendezvous URL is not a usable http/https origin.
+    BadUrl { url: String, reason: String },
+    /// TLS handshake or certificate verification failed (https origin).
+    Tls { detail: String },
     /// No response within [`REQUEST_TIMEOUT`].
     Timeout,
     /// The response body did not parse as the expected shape.
@@ -79,6 +98,14 @@ impl fmt::Display for RvError {
                 )
             }
             Self::Io(err) => write!(f, "服务器连接错误 / rendezvous io error: {err}"),
+            Self::BadUrl { url, reason } => write!(
+                f,
+                "服务器地址无效 {url}: {reason} / invalid rendezvous URL {url}: {reason}"
+            ),
+            Self::Tls { detail } => write!(
+                f,
+                "TLS 握手失败: {detail} / rendezvous TLS handshake failed: {detail}"
+            ),
             Self::Timeout => write!(
                 f,
                 "服务器请求超时（{} 秒） / rendezvous request timed out after {}s",
@@ -98,8 +125,12 @@ impl fmt::Display for RvError {
 impl std::error::Error for RvError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Io(err) => Some(err),
-            Self::Http { .. } | Self::Timeout | Self::Parse { .. } => None,
+            RvError::Io(source) => Some(source),
+            RvError::Http { .. }
+            | RvError::BadUrl { .. }
+            | RvError::Tls { .. }
+            | RvError::Timeout
+            | RvError::Parse { .. } => None,
         }
     }
 }
@@ -110,8 +141,13 @@ pub struct RvClient {
     base: String,
 }
 
+/// A request connection: plain TCP for http origins, TLS-wrapped for https.
+trait ConnIo: AsyncRead + AsyncWrite + Unpin + Send {}
+impl<T: AsyncRead + AsyncWrite + Unpin + Send> ConnIo for T {}
+
 impl RvClient {
-    /// `base` is the server origin, e.g. `http://127.0.0.1:8080`.
+    /// `base` is the server origin, e.g. `http://127.0.0.1:8080` (LAN dev) or
+    /// `https://pair.worddrop.cloud` (production, TLS-terminated by Caddy).
     pub fn new(base: &str) -> Self {
         Self {
             base: base.to_string(),
@@ -193,6 +229,68 @@ impl RvClient {
         }
     }
 
+    /// Resolve the base origin into `(hostname, port, Host header, use_tls)`.
+    /// The port defaults per scheme (80 for http, 443 for https) so a bare
+    /// `https://pair.worddrop.cloud` works without an explicit `:443`.
+    fn endpoint(&self) -> Result<(String, u16, String, bool), RvError> {
+        let url = Url::parse(&self.base).map_err(|source| RvError::BadUrl {
+            url: self.base.clone(),
+            reason: source.to_string(),
+        })?;
+        let use_tls = match url.scheme() {
+            "http" => false,
+            "https" => true,
+            scheme => {
+                return Err(RvError::BadUrl {
+                    url: self.base.clone(),
+                    reason: format!("unsupported scheme {scheme:?} (http or https only)"),
+                });
+            }
+        };
+        let hostname = url.host_str().ok_or_else(|| RvError::BadUrl {
+            url: self.base.clone(),
+            reason: "missing host".to_string(),
+        })?;
+        let port = url.port_or_known_default().ok_or_else(|| RvError::BadUrl {
+            url: self.base.clone(),
+            reason: "missing port".to_string(),
+        })?;
+        let host = match url.port() {
+            Some(p) => format!("{hostname}:{p}"),
+            None => hostname.to_string(),
+        };
+        Ok((hostname.to_string(), port, host, use_tls))
+    }
+
+    /// One TLS connector for all https connections: stock Mozilla webpki roots
+    /// (same trust policy as iroh — no custom CA, no verification weakening).
+    fn tls_connector() -> &'static TlsConnector {
+        static CONNECTOR: OnceLock<TlsConnector> = OnceLock::new();
+        CONNECTOR.get_or_init(|| {
+            let mut roots = RootCertStore::empty();
+            roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+            let config = ClientConfig::builder()
+                .with_root_certificates(roots)
+                .with_no_client_auth();
+            TlsConnector::from(Arc::new(config))
+        })
+    }
+
+    async fn tls_connect(tcp: TcpStream, hostname: &str) -> Result<TlsStream<TcpStream>, RvError> {
+        // Idempotent: some flows (receive's claim) reach TLS before the
+        // engine exists, so the process default must not be assumed here.
+        my_croc_core::transfer::engine::install_tls_provider();
+        let server_name = ServerName::try_from(hostname.to_string()).map_err(|e| RvError::Tls {
+            detail: format!("invalid server name {hostname:?}: {e}"),
+        })?;
+        Self::tls_connector()
+            .connect(server_name, tcp)
+            .await
+            .map_err(|e| RvError::Tls {
+                detail: e.to_string(),
+            })
+    }
+
     /// One HTTP/1.1 exchange on a fresh connection. The server honors
     /// `Connection: close`, so the body read runs until EOF.
     async fn request(
@@ -212,11 +310,15 @@ impl RvClient {
         path: &str,
         body: Option<&str>,
     ) -> Result<(u16, String), RvError> {
-        let host = self
-            .base
-            .trim_start_matches("http://")
-            .trim_start_matches("https://");
-        let mut stream = TcpStream::connect(host).await.map_err(RvError::Io)?;
+        let (hostname, port, host, use_tls) = self.endpoint()?;
+        let tcp = TcpStream::connect((hostname.clone(), port))
+            .await
+            .map_err(RvError::Io)?;
+        let mut stream: Box<dyn ConnIo> = if use_tls {
+            Box::new(Self::tls_connect(tcp, &hostname).await?)
+        } else {
+            Box::new(tcp)
+        };
         let mut request =
             format!("{method} {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n");
         if let Some(body) = body {

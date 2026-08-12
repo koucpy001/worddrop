@@ -9,6 +9,7 @@ use my_croc_cli::commands;
 use tracing_subscriber::EnvFilter;
 
 fn main() -> ExitCode {
+    my_croc_core::transfer::engine::install_tls_provider();
     let args = match Cli::try_parse() {
         Ok(args) => args,
         Err(err) => return print_parse_error(err),

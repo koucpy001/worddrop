@@ -39,6 +39,14 @@ serde_json = { workspace = true }
 indicatif = "0.18"
 # T14: the receive flow parses the claimed ticket as a BlobTicket.
 iroh-blobs = { workspace = true }
+# T4: production rendezvous over TLS (https://pair.worddrop.cloud). rustls +
+# tokio-rustls + webpki-roots + url are already in the lockfile via the iroh
+# tree — only dep edges are added, no new versions. default-features = false
+# matches the iroh tree's own usage (rustls defaults would pull aws-lc-rs in).
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "logging", "tls12"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "logging", "tls12"] }
+webpki-roots = "1"
+url = "2"
 
 [dev-dependencies]
 # T13 tests: spawn the REAL T6 rendezvous server in-process on an ephemeral

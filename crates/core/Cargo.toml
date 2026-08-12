@@ -28,6 +28,10 @@ sha2 = "0.10"
 # N4/F2: SessionKey ZeroizeOnDrop (zeroize already in the lockfile via
 # iroh/spake2's tree — only the dep edge is added).
 zeroize = "1"
+# T4: pin the rustls process default to ring (already in the lockfile via
+# iroh's tls-ring feature) — the tree enables both ring and aws-lc-rs, which
+# rustls rejects as ambiguous without an explicit install_default.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "logging", "tls12"] }
 
 [dev-dependencies]
 # T11 e2e: spawn the axum rendezvous server in-process (programmatic start).

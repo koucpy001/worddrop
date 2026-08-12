@@ -245,3 +245,51 @@ async fn malformed_response_is_parse_error() {
         }
     ));
 }
+
+#[test]
+fn endpoint_https_defaults_to_port_443() {
+    let client = RvClient::new("https://pair.worddrop.cloud");
+    let (hostname, port, host, use_tls) = client.endpoint().expect("parse");
+    assert_eq!(hostname, "pair.worddrop.cloud");
+    assert_eq!(port, 443);
+    assert_eq!(host, "pair.worddrop.cloud");
+    assert!(use_tls);
+}
+
+#[test]
+fn endpoint_http_keeps_explicit_port_in_host_header() {
+    let client = RvClient::new("http://127.0.0.1:8080");
+    let (hostname, port, host, use_tls) = client.endpoint().expect("parse");
+    assert_eq!(hostname, "127.0.0.1");
+    assert_eq!(port, 8080);
+    assert_eq!(host, "127.0.0.1:8080");
+    assert!(!use_tls);
+}
+
+#[test]
+fn endpoint_https_explicit_port() {
+    let client = RvClient::new("https://relay.example.test:8443");
+    let (hostname, port, host, use_tls) = client.endpoint().expect("parse");
+    assert_eq!(hostname, "relay.example.test");
+    assert_eq!(port, 8443);
+    assert_eq!(host, "relay.example.test:8443");
+    assert!(use_tls);
+}
+
+#[test]
+fn endpoint_rejects_unsupported_scheme() {
+    let client = RvClient::new("ftp://example.test");
+    let err = client.endpoint().expect_err("ftp rejected");
+    assert!(matches!(err, super::RvError::BadUrl { .. }));
+    assert!(
+        err.to_string().contains("unsupported scheme"),
+        "reason surfaced: {err}"
+    );
+}
+
+#[test]
+fn endpoint_rejects_missing_host() {
+    let client = RvClient::new("https://");
+    let err = client.endpoint().expect_err("no host rejected");
+    assert!(matches!(err, super::RvError::BadUrl { .. }));
+}

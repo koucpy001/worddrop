@@ -128,6 +128,24 @@ pub struct EngineSpec<'a> {
 
 mod events;
 
+/// Install the rustls process default once, before any endpoint exists.
+///
+/// The iroh tree enables BOTH the `ring` and `aws-lc-rs` rustls features
+/// (iroh's `tls-ring` plus iroh-relay's default `aws-lc-rs`), which rustls
+/// treats as ambiguous without an explicit [`CryptoProvider::install_default`]
+/// (it panics otherwise). `ring` is already compiled in via iroh's tls-ring;
+/// aws-lc-rs would only add a heavy C build for nothing. Both the https
+/// rendezvous client (CLI) and iroh's wss relay connection read this default.
+pub fn install_tls_provider() {
+    use std::sync::OnceLock;
+    static INSTALLED: OnceLock<()> = OnceLock::new();
+    INSTALLED.get_or_init(|| {
+        let _ = rustls::crypto::CryptoProvider::install_default(
+            rustls::crypto::ring::default_provider(),
+        );
+    });
+}
+
 impl TransferEngine {
     /// Create an engine from the core [`Config`]: the blob store lives at
     /// `<data_dir>/blobs` and the endpoint uses the configured self-hosted
@@ -207,6 +225,7 @@ impl TransferEngine {
     /// relay, a CONTROL_ALPN acceptor, and optional serve-event tracking for
     /// the send progress bar — every knob the CLI/GUI send flow needs.
     pub async fn new_spec(spec: EngineSpec<'_>) -> Result<Self, Error> {
+        install_tls_provider();
         let served = Arc::new(AtomicU64::new(0));
         let events = if spec.track_served_bytes {
             Some(events::make_event_sender(served.clone()))
