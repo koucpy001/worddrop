@@ -344,27 +344,37 @@ sudo systemctl daemon-reload && sudo systemctl enable --now my-croc-rendezvous i
   （iroh 1.0.3 只用内置 webpki roots，无自定义 CA/关闭校验开关）——想验证 TLS
   全链路只能配真实域名 + Let's Encrypt。详见 `deploy/README.md` 的 TLS 章节。
 
-## Android 设备测试清单 (deferred — needs a physical device)
+## Android 设备测试清单（真机执行结果，2026-08-12）
 
-T20/T21 的验收只到 `flutter build apk --debug` + `flutter test`（构建机无
-emulator/KVM，无法真机验证）。在有实体 Android 设备时按以下清单执行并把结果
-记录到 `.omo/evidence/`（目前标记为 deferred，不代表已通过）：
+已在 vivo <DEVICE_MODEL>（Android 12）真机上实际执行，详细记录见
+`.omo/evidence/my-croc-prod/task-8-my-croc-prod.txt`：
 
-1. 安装调试包：`flutter build apk --debug` 产物在
-   `flutter/app/build/app/outputs/flutter-apk/app-debug.apk`，`adb install -r` 或
-   拷贝到手机安装（首次安装需允许"安装未知来源应用"）。
-2. 授予权限：设置 → 应用 → my-croc → 权限 → 允许"存储/文件"（传文件用）与
-   "通知"（进度提示）。
-3. 传输前先启动自托管服务：本机启动 `iroh-relay` 与 `my-croc-rendezvous`（T6 产物），
-   并在 GUI 设置页填入服务地址。
-4. 注意：设备上的服务地址**不能写 `127.0.0.1`**（那是设备自己）——必须填写
-   宿主机的局域网 IP（如 `http://192.168.x.x:8080` / `http://192.168.x.x:3340`，
-   emulator 专用的 `10.0.2.2` 不适用于真机）。宿主防火墙需放行对应端口。
-5. 桌面 → Android 传输：两端配对同一 word code，验证文件到达、内容一致
-   （对比 sha256）。
-6. 中断续传：传输进行中杀掉 app（或关飞行模式），重新打开后应提示
-   "继续上次传输"并可续传完成。
-7. 反向：Android → 桌面同样验证一次。
+1. **安装**：✅ 通过 — release 签名 APK（CN=WordDrop）经 `adb install -r` 安装成功。
+2. **权限**：✅ 通过（按设计）— 应用仅声明 `INTERNET` 权限；Android 12 分区存储下
+   写入应用自有目录不需要任何运行时权限（对未声明权限执行 `pm grant` 会被系统
+   拒绝，属预期行为，已实测记录）。
+3. **服务地址配置**：✅ 通过 — 设置页填入 `http://<SERVER_IP>:8080`
+   （配对服务器）与 `http://<SERVER_IP>:3340`（中继），保存后重启应用验证
+   持久化生效。执行中发现并修复一个真机问题：`getExternalFilesDir` 预创建应用
+   外部目录（Android 11+ FUSE 拒绝应用对 `Android/data/<pkg>/files` 的原始路径
+   mkdir，导致配置无法保存）。
+4. **设备地址规则**：✅ 通过 — 真机验证「不能写 127.0.0.1」规则；本部署拓扑
+   （手机在公网、服务器在云上）按编排器实测结论改用公网 IP 的 http 地址
+   （云内网地址 <LAN_IP> 手机不可达）。
+5. **桌面 → Android 传输**：⛔ 阻塞 — 手机应用发起的中继连接在手机侧建立
+   （`/proc/net/tcp` 可见 ESTAB）但数据包从未到达服务器（服务端 tcpdump/ss
+   零包）；同网络下 shell（nc）与浏览器到 :3340 正常、应用到 :8080 的配对
+   请求也正常。疑似手机侧网络功能（vivo 联网管理/网络加速，或热点网关路径）
+   对应用到 3340 端口的连接做本地截断。sha256 字节一致性因此未能在手机侧
+   验证（同拓扑 CLI↔CLI 对照已验证 sha256 一致）。
+6. **中断续传**：⛔ 阻塞（依赖步骤 5）— 恢复机制已在代码层确认（GUI 接收走
+   `receive_resumable`，续传为透明行为，无 GUI 弹窗）。
+7. **反向（Android → 桌面）**：⛔ 阻塞（依赖步骤 5）— 待发送文件已备好
+   （`/sdcard/Download/reverse-test.txt`），系统文件选择器可用 uiautomator 驱动。
+
+结论：步骤 1-4 通过，步骤 5-7 因手机应用网络路径问题阻塞（完整诊断与后续排查
+建议见证据文件）。本清单不再标记为 deferred，但传输类步骤尚未通过，不得视为
+已验证。
 
 ## Development guide (开发指南)
 
