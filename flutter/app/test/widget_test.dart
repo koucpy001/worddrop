@@ -12,7 +12,7 @@ void main() {
       backendFactory: (_) async => throw StateError('not used on home'),
     ));
 
-    expect(find.text('my-croc'), findsOneWidget);
+    expect(find.text('WordDrop'), findsOneWidget);
     expect(find.text('发送文件'), findsOneWidget);
     expect(find.text('接收文件'), findsOneWidget);
     expect(find.text('跨网络安全传输文件'), findsOneWidget);

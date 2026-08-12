@@ -90,7 +90,7 @@ class _HomeBody extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.md),
                 const Text(
-                  'my-croc',
+                  'WordDrop',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 34,

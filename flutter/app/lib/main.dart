@@ -40,7 +40,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'my-croc',
+      title: 'WordDrop',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
       home: HomeScreen(backendFactory: backendFactory),
