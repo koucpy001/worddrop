@@ -2511,12 +2511,16 @@ dependencies = [
  "iroh-blobs",
  "my-croc-core",
  "rand 0.9.5",
+ "rustls",
  "serde",
  "serde_json",
  "tokio",
+ "tokio-rustls",
  "toml",
  "tracing",
  "tracing-subscriber",
+ "url",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -2529,6 +2533,7 @@ dependencies = [
  "iroh-blobs",
  "n0-future",
  "rand 0.9.5",
+ "rustls",
  "serde",
  "serde_json",
  "sha2 0.10.9",

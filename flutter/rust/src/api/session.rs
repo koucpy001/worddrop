@@ -259,6 +259,7 @@ fn role_data_dir(base: &Path, role: SessionRole) -> PathBuf {
 }
 
 async fn build_session(role: SessionRole) -> Result<Arc<SessionState>, String> {
+    crate::api::config::ensure_android_config_dir();
     let cfg = Config::load().map_err(|err| err.to_string())?;
     let relay_mode = relay_mode_from_url(&cfg.relay_url)?;
     let (events, _) = broadcast::channel(128);
