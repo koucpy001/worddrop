@@ -6,7 +6,8 @@
 # flutter app/build artifacts are ignored by flutter/app/.gitignore (flutter create)
 # bridge crate + cargokit artifacts by flutter/.gitignore
 # opencode internal state (run-continuation is session bookkeeping, not source)
-.omo/run-continuation/
+# Local work records — NEVER pushed to public repos (privacy rules, AGENTS.md §8)
+.omo/
 # Android release signing secrets - keystore + key.properties must NEVER be committed
 *.jks
 key.properties
