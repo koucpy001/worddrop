@@ -223,4 +223,52 @@ void main() {
       expect(callCount, 2);
     });
   });
+
+  group('official server hint (Bug 4 option B)', () {
+    Future<bridge.ConfigDto> localDefaults() async => bridge.ConfigDto(
+          rendezvousUrl: 'http://127.0.0.1:8080',
+          relayUrl: 'http://127.0.0.1:3340',
+          dataDir: '/home/user/.config/worddrop',
+          overwrite: false,
+        );
+
+    testWidgets('hint shown while both fields hold the 127.0.0.1 defaults',
+        (tester) async {
+      await tester.pumpWidget(_settingsApp(getConfig: localDefaults));
+      await _pumpFrames(tester);
+
+      expect(
+        find.textContaining('官方服务：https://relay.worddrop.cloud'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('https://pair.worddrop.cloud'),
+        findsOneWidget,
+      );
+      // The defaults themselves are unchanged.
+      expect(find.text('http://127.0.0.1:8080'), findsAtLeast(1));
+      expect(find.text('http://127.0.0.1:3340'), findsAtLeast(1));
+    });
+
+    testWidgets('hint disappears as soon as a server field is edited',
+        (tester) async {
+      await tester.pumpWidget(_settingsApp(getConfig: localDefaults));
+      await _pumpFrames(tester);
+      expect(find.textContaining('官方服务'), findsOneWidget);
+
+      final field = find.widgetWithText(TextField, 'http://127.0.0.1:8080');
+      await tester.enterText(field, 'https://pair.worddrop.cloud');
+      await tester.pump();
+
+      expect(find.textContaining('官方服务'), findsNothing);
+    });
+
+    testWidgets('hint not shown when config already uses public servers',
+        (tester) async {
+      await tester.pumpWidget(_settingsApp(getConfig: _testConfig));
+      await _pumpFrames(tester);
+
+      expect(find.textContaining('官方服务'), findsNothing);
+    });
+  });
 }

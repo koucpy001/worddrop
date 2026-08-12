@@ -47,15 +47,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    // React to edits so the official-server hint appears/disappears as soon
+    // as the URL fields leave (or return to) the local defaults.
+    _rendezvousController.addListener(_onUrlFieldChanged);
+    _relayController.addListener(_onUrlFieldChanged);
     _load();
   }
 
   @override
   void dispose() {
+    _rendezvousController.removeListener(_onUrlFieldChanged);
+    _relayController.removeListener(_onUrlFieldChanged);
     _rendezvousController.dispose();
     _relayController.dispose();
     _dataDirController.dispose();
     super.dispose();
+  }
+
+  void _onUrlFieldChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// True while both server fields still show the built-in local defaults
+  /// (127.0.0.1) — i.e. the user has not configured public servers yet.
+  bool get _showingDefaultServers {
+    return _rendezvousController.text.contains('127.0.0.1') &&
+        _relayController.text.contains('127.0.0.1');
   }
 
   Future<void> _load() async {
@@ -144,6 +161,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           icon: Icons.cloud_outlined,
           onSaved: (v) => _save('relay_url', v),
         ),
+        if (_showingDefaultServers) ...[
+          const SizedBox(height: AppSpacing.md),
+          const _OfficialServerHint(),
+        ],
         const SizedBox(height: AppSpacing.lg),
         _SectionLabel('存储设置'),
         _UrlField(
@@ -164,6 +185,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: AppSpacing.xl),
         _ResetButton(onReset: _load),
       ],
+    );
+  }
+}
+
+/// One-line helper shown while the server fields still carry the local
+/// defaults: points the user at the official public servers. Pure hint — the
+/// default values themselves are NOT changed (Bug 4 option B).
+class _OfficialServerHint extends StatelessWidget {
+  const _OfficialServerHint();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.sm + 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F1),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: const Color(0xFFD6E2D0)),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, size: 16, color: Color(0xFF57534E)),
+          SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              '官方服务：https://relay.worddrop.cloud / https://pair.worddrop.cloud（自托管或局域网可留空使用默认）',
+              style: TextStyle(
+                  fontSize: 12.5, color: Color(0xFF57534E), height: 1.5),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
