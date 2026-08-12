@@ -173,7 +173,7 @@ mod tests {
 
     fn temp_dir(tag: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("my-croc-record-test-{tag}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("worddrop-record-test-{tag}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("create temp dir");
         dir

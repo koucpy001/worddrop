@@ -1,4 +1,4 @@
-// Design tokens for the my-croc Flutter app.
+// Design tokens for the worddrop Flutter app.
 //
 // One seed (deep evergreen — croc skin) drives the Material 3 color scheme;
 // the warm sand scaffold + amber accent are the app's own surface choices.

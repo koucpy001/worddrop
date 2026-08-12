@@ -34,22 +34,22 @@ use iroh::endpoint::Connection;
 use iroh::protocol::{AcceptError, DynProtocolHandler, ProtocolHandler};
 use iroh::{RelayMode, RelayUrl};
 use iroh_blobs::ticket::BlobTicket;
-use my_croc_core::pairing::handshake::HandshakeMessage;
-use my_croc_core::pairing::spake::{SessionKey, SpakeError, SpakeSession};
-use my_croc_core::pairing::wordcode::{WordCode, WordCodeError};
-use my_croc_core::pairing::wordlist::WORDS;
-use my_croc_core::protocol::wire::{WireError, WireMessage};
-use my_croc_core::session::Session;
-use my_croc_core::session::control::{
+use worddrop_core::pairing::handshake::HandshakeMessage;
+use worddrop_core::pairing::spake::{SessionKey, SpakeError, SpakeSession};
+use worddrop_core::pairing::wordcode::{WordCode, WordCodeError};
+use worddrop_core::pairing::wordlist::WORDS;
+use worddrop_core::protocol::wire::{WireError, WireMessage};
+use worddrop_core::session::Session;
+use worddrop_core::session::control::{
     ControlMessage, FileMeta, HANDSHAKE_TIMEOUT, IDLE_TIMEOUT, PROTOCOL_VERSION, SessionError,
     recv_message_timeout, send_message,
 };
-use my_croc_core::session::state::{SessionPhase, Transition, TransitionError};
-use my_croc_core::transfer::engine::TransferEngine;
-use my_croc_core::transfer::receive::{
+use worddrop_core::session::state::{SessionPhase, Transition, TransitionError};
+use worddrop_core::transfer::engine::TransferEngine;
+use worddrop_core::transfer::receive::{
     ReceiveError, ReceiveOptions, ReceiveProgress, TransferResult,
 };
-use my_croc_core::transfer::send::{ProgressEvent, SendError};
+use worddrop_core::transfer::send::{ProgressEvent, SendError};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::{OnceCell, mpsc};
@@ -66,7 +66,7 @@ use tokio::time::timeout;
 /// sender's endpoint (via `new_local_n0`'s extra handler) and dialed by the
 /// receiver. Dialing an unregistered ALPN fails with TLS alert 120
 /// ("peer doesn't support any known protocol") — the original T11 bug.
-const CONTROL_ALPN: &[u8] = b"my-croc/control";
+const CONTROL_ALPN: &[u8] = b"worddrop/control";
 
 /// The relay port both endpoints use via `RelayMode::Custom`
 /// (`iroh-relay --dev` binds the plain-HTTP/WebSocket relay service here).
@@ -94,7 +94,7 @@ static DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn temp_dir(tag: &str) -> PathBuf {
     let n = DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("my-croc-e2e-{tag}-{}-{n}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("worddrop-e2e-{tag}-{}-{n}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).expect("create temp dir");
     dir
@@ -303,7 +303,7 @@ async fn spawn_rendezvous() -> (String, JoinHandle<()>) {
         .expect("bind ephemeral rendezvous port");
     let url = format!("http://{}", listener.local_addr().expect("local addr"));
     let handle = tokio::spawn(async move {
-        let _ = my_croc_rendezvous::server::serve_on(listener).await;
+        let _ = worddrop_rendezvous::server::serve_on(listener).await;
     });
     // The serve task binds asynchronously; poll /health until it answers.
     let client = RvClient::new(&url);

@@ -15,10 +15,10 @@ use iroh::protocol::{AcceptError, ProtocolHandler};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::mpsc;
 
-use my_croc_core::pairing::handshake::HandshakeMessage;
-use my_croc_core::pairing::spake::{SessionKey, SpakeError, SpakeSession};
-use my_croc_core::protocol::wire::{MAX_FRAME_BYTES, WireError, WireMessage};
-use my_croc_core::session::control::{
+use worddrop_core::pairing::handshake::HandshakeMessage;
+use worddrop_core::pairing::spake::{SessionKey, SpakeError, SpakeSession};
+use worddrop_core::protocol::wire::{MAX_FRAME_BYTES, WireError, WireMessage};
+use worddrop_core::session::control::{
     ControlMessage, HANDSHAKE_TIMEOUT, IDLE_TIMEOUT, PROTOCOL_VERSION, SessionError,
     recv_message_timeout,
 };
@@ -26,7 +26,7 @@ use my_croc_core::session::control::{
 /// ALPN of the pairing control stream (mirrors the e2e constant). The
 /// iroh-blobs router handler consumes every incoming bidi stream on its own
 /// ALPN as a blob request, so control traffic needs its own ALPN.
-pub const CONTROL_ALPN: &[u8] = b"my-croc/control";
+pub const CONTROL_ALPN: &[u8] = b"worddrop/control";
 
 /// Upper bound for one pairing exchange round (claim, dial, handshake).
 pub const PAIR_TIMEOUT: Duration = Duration::from_secs(60);

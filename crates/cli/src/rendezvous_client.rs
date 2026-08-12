@@ -1,4 +1,4 @@
-//! HTTP client for the my-croc rendezvous server (T6).
+//! HTTP client for the worddrop rendezvous server (T6).
 //!
 //! A minimal HTTP/1.1 client (one request per connection, `Connection:
 //! close`) — the same pattern the T11 e2e test proved against the real axum
@@ -279,7 +279,7 @@ impl RvClient {
     async fn tls_connect(tcp: TcpStream, hostname: &str) -> Result<TlsStream<TcpStream>, RvError> {
         // Idempotent: some flows (receive's claim) reach TLS before the
         // engine exists, so the process default must not be assumed here.
-        my_croc_core::transfer::engine::install_tls_provider();
+        worddrop_core::transfer::engine::install_tls_provider();
         let server_name = ServerName::try_from(hostname.to_string()).map_err(|e| RvError::Tls {
             detail: format!("invalid server name {hostname:?}: {e}"),
         })?;

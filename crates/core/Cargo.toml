@@ -1,9 +1,9 @@
-# my-croc-core — shared core library
+# worddrop-core — shared core library
 # Pairing (SPAKE2 word-code), session state machine, iroh transfer engine,
 # persistent identity, resume records. Used by CLI, GUI (via FRB bridge) and Android.
 
 [package]
-name = "my-croc-core"
+name = "worddrop-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -35,4 +35,4 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 
 [dev-dependencies]
 # T11 e2e: spawn the axum rendezvous server in-process (programmatic start).
-my-croc-rendezvous = { path = "../rendezvous" }
+worddrop-rendezvous = { path = "../rendezvous" }

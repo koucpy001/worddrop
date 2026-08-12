@@ -1,4 +1,4 @@
-# my-croc — Cargo workspace
+# worddrop — Cargo workspace
 # Cross-platform WAN file transfer: Windows/macOS GUI, Linux CLI, Android.
 # Transport: iroh 1.0 (QUIC, NAT hole-punching, relay fallback, E2E encryption).
 # Pairing: SPAKE2 word-code (nameplate-word-word-word), rendezvous sees nameplate only.
@@ -11,7 +11,7 @@ members = ["crates/core", "crates/rendezvous", "crates/cli"]
 version = "0.2.0"
 edition = "2024"
 license = "MIT"
-authors = ["my-croc contributors"]
+authors = ["worddrop contributors"]
 rust-version = "1.97"
 
 # Pinned exactly (plan, review-approved): iroh 1.0.3 + iroh-blobs 0.103

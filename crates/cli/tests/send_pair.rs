@@ -20,24 +20,24 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 
-use my_croc_core::pairing::wordcode::WordCode;
-use my_croc_core::session::control::{
+use worddrop_core::pairing::wordcode::WordCode;
+use worddrop_core::session::control::{
     ControlMessage, HANDSHAKE_TIMEOUT, PROTOCOL_VERSION, recv_message_timeout, send_message,
 };
-use my_croc_core::transfer::engine::{EngineSpec, TransferEngine};
-use my_croc_core::transfer::receive::ReceiveOptions;
+use worddrop_core::transfer::engine::{EngineSpec, TransferEngine};
+use worddrop_core::transfer::receive::ReceiveOptions;
 
-use my_croc_cli::rendezvous_client::RvClient;
-use my_croc_cli::send::{SendOutcome, run_send};
-use my_croc_cli::ui::SendUi;
-use my_croc_cli::wire::{self, CONTROL_ALPN, ControlAcceptor, PAIR_TIMEOUT};
+use worddrop_cli::rendezvous_client::RvClient;
+use worddrop_cli::send::{SendOutcome, run_send};
+use worddrop_cli::ui::SendUi;
+use worddrop_cli::wire::{self, CONTROL_ALPN, ControlAcceptor, PAIR_TIMEOUT};
 
 static DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn temp_dir(tag: &str) -> PathBuf {
     let n = DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
     let dir =
-        std::env::temp_dir().join(format!("my-croc-cli-send-{tag}-{}-{n}", std::process::id()));
+        std::env::temp_dir().join(format!("worddrop-cli-send-{tag}-{}-{n}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).expect("create temp dir");
     dir
@@ -62,7 +62,7 @@ async fn spawn_rendezvous() -> (String, JoinHandle<()>) {
     let addr = listener.local_addr().expect("local addr");
     let url = format!("http://{addr}");
     let handle = tokio::spawn(async move {
-        let _ = my_croc_rendezvous::server::serve_on(listener).await;
+        let _ = worddrop_rendezvous::server::serve_on(listener).await;
     });
     let client = RvClient::new(&url);
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
@@ -212,13 +212,13 @@ async fn start_sender_side(
     paths: Vec<PathBuf>,
 ) -> (
     std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<SendOutcome, my_croc_cli::send::SendError>>>,
+        Box<dyn std::future::Future<Output = Result<SendOutcome, worddrop_cli::send::SendError>>>,
     >,
     String,
 ) {
     let (code_tx, mut code_rx) = mpsc::channel(1);
     let sender_fut: std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<SendOutcome, my_croc_cli::send::SendError>>>,
+        Box<dyn std::future::Future<Output = Result<SendOutcome, worddrop_cli::send::SendError>>>,
     > = Box::pin(run_send(
         engine,
         control_rx,

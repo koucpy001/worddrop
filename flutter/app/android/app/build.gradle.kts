@@ -18,7 +18,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.mycroc.app"
+    namespace = "com.worddrop.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -40,10 +40,10 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.mycroc.app"
+        applicationId = "com.worddrop.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        // T20: minSdk 26 override (Flutter default is 24) - my-croc requires
+        // T20: minSdk 26 override (Flutter default is 24) - worddrop requires
         // Android 8.0+ (okhttp/rustls TLS baseline for the iroh relay transport).
         minSdk = 26
         targetSdk = flutter.targetSdkVersion

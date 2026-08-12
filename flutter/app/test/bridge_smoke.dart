@@ -4,12 +4,12 @@
 //
 // Not named *_test.dart on purpose — `flutter test` must stay hermetic (no
 // native build required); run explicitly after building the bridge cdylib:
-//   cargo build -p my_croc_bridge   (with CARGO_TARGET_DIR pointing at the
+//   cargo build -p worddrop_bridge   (with CARGO_TARGET_DIR pointing at the
 //                                    shared root target — see task-17 evidence)
-//   MY_CROC_BRIDGE_SO=$PWD/../../target/debug/libmy_croc_bridge.so \
+//   WORDDROP_BRIDGE_SO=$PWD/../../target/debug/libworddrop_bridge.so \
 //     flutter test test/bridge_smoke.dart
-// The harness script must set MY_CROC_DATA_DIR / MY_CROC_CONFIG_DIR to fresh
-// temp dirs and MY_CROC_SMOKE_RV_URL to a running local rendezvous server.
+// The harness script must set WORDDROP_DATA_DIR / WORDDROP_CONFIG_DIR to fresh
+// temp dirs and WORDDROP_SMOKE_RV_URL to a running local rendezvous server.
 // The config test below then writes rendezvous_url + relay_url through the
 // bridge's setConfig, which the session tests rely on (config resolution is
 // env > file > default, so the harness only sets the two dirs).
@@ -33,8 +33,8 @@ void main() {
   late final String soPath;
 
   setUpAll(() async {
-    soPath = Platform.environment['MY_CROC_BRIDGE_SO'] ??
-        'build/linux/x64/debug/bundle/lib/libmy_croc_bridge.so';
+    soPath = Platform.environment['WORDDROP_BRIDGE_SO'] ??
+        'build/linux/x64/debug/bundle/lib/libworddrop_bridge.so';
     expect(File(soPath).existsSync(), isTrue,
         reason: 'build the bridge cdylib first (see header comment)');
     await RustLib.init(externalLibrary: ExternalLibrary.open(soPath));
@@ -42,7 +42,7 @@ void main() {
 
   test('hello() answers through the native cdylib', () async {
     final greeting = await hello(name: 'smoke');
-    expect(greeting, contains('my-croc'));
+    expect(greeting, contains('worddrop'));
   });
 
   test('subscribeEvents() yields BridgeEvents (T16 debug bus)', () async {
@@ -66,8 +66,8 @@ void main() {
   // Runs first on purpose: the pair tests below create sessions that read
   // these config-file values (env only sets the two dirs).
   test('config get/set round-trips through the bridge', () async {
-    final rvUrl = Platform.environment['MY_CROC_SMOKE_RV_URL'] ??
-        (throw StateError('MY_CROC_SMOKE_RV_URL is required'));
+    final rvUrl = Platform.environment['WORDDROP_SMOKE_RV_URL'] ??
+        (throw StateError('WORDDROP_SMOKE_RV_URL is required'));
     final stored = await setConfig(key: 'rendezvous_url', value: rvUrl);
     expect(stored, rvUrl);
     expect(await setConfig(key: 'relay_url', value: 'disabled'), 'disabled');
@@ -75,14 +75,14 @@ void main() {
     final after = await getConfig();
     expect(after.rendezvousUrl, rvUrl);
     expect(after.relayUrl, 'disabled');
-    // Env wins over the file: MY_CROC_DATA_DIR (harness) beats any file value.
-    expect(after.dataDir, Platform.environment['MY_CROC_DATA_DIR']);
+    // Env wins over the file: WORDDROP_DATA_DIR (harness) beats any file value.
+    expect(after.dataDir, Platform.environment['WORDDROP_DATA_DIR']);
 
     await expectLater(setConfig(key: 'bogus', value: 'x'), throwsA(anything));
   });
 
   test('happy path: Dart-created sender+receiver pair transfers a file', () async {
-    final tmp = await Directory.systemTemp.createTemp('my-croc-smoke-happy');
+    final tmp = await Directory.systemTemp.createTemp('worddrop-smoke-happy');
     final content = List<int>.generate(4096, (i) => (i * 7) % 251);
     final src = File('${tmp.path}/smoke.txt')..writeAsBytesSync(content);
     final outDir = '${tmp.path}/out';
@@ -137,7 +137,7 @@ void main() {
 
   test('failure path: cancel from Dart propagates to the Rust cancel watch',
       () async {
-    final tmp = await Directory.systemTemp.createTemp('my-croc-smoke-cancel');
+    final tmp = await Directory.systemTemp.createTemp('worddrop-smoke-cancel');
     final src = File('${tmp.path}/cancel.txt')..writeAsStringSync('cancellable');
 
     final sender = await createSession(role: SessionRole.sender);

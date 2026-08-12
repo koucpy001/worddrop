@@ -1,4 +1,4 @@
-//! my-croc-cli — Linux CLI binary crate.
+//! worddrop-cli — Linux CLI binary crate.
 //!
 //! Command surface (clap, T12), TOML config file with env/default merge,
 //! unified error-to-exit-code mapping, and the send/receive command flows.

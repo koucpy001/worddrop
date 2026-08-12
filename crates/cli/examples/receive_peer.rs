@@ -5,7 +5,7 @@
 //! the offer, download + export, and report the Result back to the sender.
 //!
 //! Usage:
-//!   cargo run -p my-croc-cli --example receive_peer -- --code N-word-word-word [--output DIR]
+//!   cargo run -p worddrop-cli --example receive_peer -- --code N-word-word-word [--output DIR]
 //!
 //! This is test scaffolding, not the shipped receive command (T14).
 
@@ -18,15 +18,15 @@ use iroh::RelayMode;
 use iroh_blobs::ticket::BlobTicket;
 use tokio::time::timeout;
 
-use my_croc_core::pairing::wordcode::WordCode;
-use my_croc_core::session::control::{
+use worddrop_core::pairing::wordcode::WordCode;
+use worddrop_core::session::control::{
     ControlMessage, HANDSHAKE_TIMEOUT, PROTOCOL_VERSION, recv_message_timeout, send_message,
 };
-use my_croc_core::transfer::engine::TransferEngine;
-use my_croc_core::transfer::receive::ReceiveOptions;
+use worddrop_core::transfer::engine::TransferEngine;
+use worddrop_core::transfer::receive::ReceiveOptions;
 
-use my_croc_cli::rendezvous_client::RvClient;
-use my_croc_cli::wire::{self, CONTROL_ALPN, PAIR_TIMEOUT};
+use worddrop_cli::rendezvous_client::RvClient;
+use worddrop_cli::wire::{self, CONTROL_ALPN, PAIR_TIMEOUT};
 
 /// Upper bound for the whole receive side.
 const FLOW_TIMEOUT: Duration = Duration::from_secs(180);
@@ -44,10 +44,10 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    let rendezvous_url = std::env::var("MY_CROC_RENDEZVOUS_URL")
+    let rendezvous_url = std::env::var("WORDDROP_RENDEZVOUS_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:8080".to_string());
     let relay_url =
-        std::env::var("MY_CROC_RELAY_URL").unwrap_or_else(|_| "http://127.0.0.1:3340".to_string());
+        std::env::var("WORDDROP_RELAY_URL").unwrap_or_else(|_| "http://127.0.0.1:3340".to_string());
 
     let (nameplate, words) = WordCode::split(&args.code)?;
     println!("nameplate = {nameplate}, words = {words}");

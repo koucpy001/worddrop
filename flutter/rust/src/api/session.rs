@@ -1,4 +1,4 @@
-//! FRB session API: a thin facade over my-croc-core driving the same flows
+//! FRB session API: a thin facade over worddrop-core driving the same flows
 //! as the CLI (send/mod.rs, receive.rs), reusing the CLI's wire helpers,
 //! rendezvous client, and config. Each session owns a TransferEngine, a core
 //! Session state machine, and a per-session event bus fanned into
@@ -15,14 +15,14 @@ use std::time::Duration;
 use iroh::RelayMode;
 use tokio::sync::{broadcast, mpsc, oneshot};
 
-use my_croc_core::identity::{self, Identity};
-use my_croc_core::session::Session;
-use my_croc_core::session::state::Transition;
-use my_croc_core::transfer::engine::{EngineSpec, TransferEngine};
+use worddrop_core::identity::{self, Identity};
+use worddrop_core::session::Session;
+use worddrop_core::session::state::Transition;
+use worddrop_core::transfer::engine::{EngineSpec, TransferEngine};
 
-use my_croc_cli::config::Config;
-use my_croc_cli::rendezvous_client::RvClient;
-use my_croc_cli::wire::{CONTROL_ALPN, ControlAcceptor};
+use worddrop_cli::config::Config;
+use worddrop_cli::rendezvous_client::RvClient;
+use worddrop_cli::wire::{CONTROL_ALPN, ControlAcceptor};
 
 use crate::api::events::{BridgeEvent, fan_out};
 use crate::api::RUNTIME;
@@ -317,7 +317,7 @@ async fn build_session(role: SessionRole) -> Result<Arc<SessionState>, String> {
             let engine_for_task = engine;
             let control_rx = control_rx.expect("sender control channel");
             let _ = std::thread::Builder::new()
-                .name(format!("my-croc-sender-{id}"))
+                .name(format!("worddrop-sender-{id}"))
                 .spawn(move || {
                     RUNTIME.block_on(crate::api::flows::run_sender_flow(
                         engine_for_task,
@@ -337,7 +337,7 @@ async fn build_session(role: SessionRole) -> Result<Arc<SessionState>, String> {
             let data_dir = cfg.data_dir.clone();
             let overwrite = cfg.overwrite;
             let _ = std::thread::Builder::new()
-                .name(format!("my-croc-receiver-{id}"))
+                .name(format!("worddrop-receiver-{id}"))
                 .spawn(move || {
                     RUNTIME.block_on(crate::api::flows::run_receiver_flow(
                         engine_for_task,

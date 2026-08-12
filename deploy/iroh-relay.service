@@ -20,7 +20,7 @@
 # (For a plain-HTTP local install instead, run `iroh-relay --dev` on port 3340.)
 
 [Unit]
-Description=iroh relay server (my-croc transport fallback)
+Description=iroh relay server (worddrop transport fallback)
 After=network-online.target
 Wants=network-online.target
 

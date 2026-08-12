@@ -9,7 +9,7 @@ use iroh::RelayMode;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 
-use my_croc_core::identity;
+use worddrop_core::identity;
 
 use super::*;
 use crate::api::ENV_LOCK;
@@ -41,7 +41,7 @@ fn with_test_env<T>(f: impl FnOnce() -> T) -> T {
 fn fresh_base(tag: &str) -> std::path::PathBuf {
     let n = DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
     let base =
-        std::env::temp_dir().join(format!("my-croc-bridge-{tag}-{}-{n}", std::process::id()));
+        std::env::temp_dir().join(format!("worddrop-bridge-{tag}-{}-{n}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(&base).unwrap();
     base
@@ -58,9 +58,9 @@ fn spawn_rendezvous() -> (String, tokio::task::JoinHandle<()>) {
     });
     let url = format!("http://{addr}");
     let handle = RUNTIME.spawn(async move {
-        let _ = my_croc_rendezvous::server::serve(addr).await;
+        let _ = worddrop_rendezvous::server::serve(addr).await;
     });
-    let client = my_croc_cli::rendezvous_client::RvClient::new(&url);
+    let client = worddrop_cli::rendezvous_client::RvClient::new(&url);
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     loop {
         let healthy = RUNTIME.block_on(async { client.health().await.is_ok() });

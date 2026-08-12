@@ -6,7 +6,7 @@
 
 use std::{fmt, process::ExitCode};
 
-use my_croc_core::identity;
+use worddrop_core::identity;
 
 use crate::config::ConfigError;
 
@@ -85,7 +85,7 @@ impl From<crate::receive::RecvError> for CliError {
                 if matches!(
                     wire_err,
                     crate::wire::PairError::Spake(
-                        my_croc_core::pairing::spake::SpakeError::ConfirmationMismatch,
+                        worddrop_core::pairing::spake::SpakeError::ConfirmationMismatch,
                     )
                 ) =>
             {

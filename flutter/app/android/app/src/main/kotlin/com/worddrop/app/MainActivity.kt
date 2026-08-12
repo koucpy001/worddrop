@@ -1,4 +1,4 @@
-package com.mycroc.app
+package com.worddrop.app
 
 import io.flutter.embedding.android.FlutterActivity
 

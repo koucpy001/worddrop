@@ -1,4 +1,4 @@
-# my-croc self-hosted infrastructure: iroh-relay + my-croc-rendezvous + Caddy.
+# worddrop self-hosted infrastructure: iroh-relay + worddrop-rendezvous + Caddy.
 #
 # PRODUCTION mode by default: the relay runs plain HTTP on :80 serving the
 # FULL protocol (incl. /relay WebSocket) — deliberately NO [tls] section
@@ -6,7 +6,7 @@
 # Caddy is the SOLE host owner of 80/443 TCP for both worddrop.cloud domains
 # and the sole cert issuer: it terminates TLS with its own Let's Encrypt
 # certs (persisted in the caddy-data volume — certs survive container
-# recreate) and reverse-proxies pair.worddrop.cloud -> my-croc-rendezvous:8080
+# recreate) and reverse-proxies pair.worddrop.cloud -> worddrop-rendezvous:8080
 # and relay.worddrop.cloud (incl. WebSocket /relay) -> iroh-relay:80.
 #
 # iroh-relay-dev keeps the LAN dev path alive: same image in --dev mode on
@@ -23,7 +23,7 @@
 # Host ports are fixed at the documented defaults (80/443 Caddy / 8080
 # rendezvous / 3340 dev relay / 9090 relay metrics).
 
-name: my-croc
+name: worddrop
 
 services:
   iroh-relay:
@@ -33,14 +33,14 @@ services:
       # Mirror overrides for slow/firewalled networks; empty = official sources
       # (crates.io + deb.debian.org) which is correct on any VPS/CI host.
       # China example:
-      #   MY_CROC_APT_MIRROR=mirrors.tencentyun.com
-      #   MY_CROC_CARGO_REGISTRY=sparse+https://rsproxy.cn/index/
+      #   WORDDROP_APT_MIRROR=mirrors.tencentyun.com
+      #   WORDDROP_CARGO_REGISTRY=sparse+https://rsproxy.cn/index/
       args:
-        APT_MIRROR: "${MY_CROC_APT_MIRROR:-}"
-        CARGO_REGISTRY: "${MY_CROC_CARGO_REGISTRY:-}"
-        CARGO_BUILD_JOBS: "${MY_CROC_CARGO_JOBS:-2}"
-    image: my-croc/iroh-relay:0.2.0
-    container_name: my-croc-iroh-relay
+        APT_MIRROR: "${WORDDROP_APT_MIRROR:-}"
+        CARGO_REGISTRY: "${WORDDROP_CARGO_REGISTRY:-}"
+        CARGO_BUILD_JOBS: "${WORDDROP_CARGO_JOBS:-2}"
+    image: worddrop/iroh-relay:0.2.0
+    container_name: worddrop-iroh-relay
     restart: unless-stopped
     # Hardening (T5): non-root uid 10001 (Dockerfile USER) + no-new-privileges
     # + mem cap + init (PID 1 zombie reaping). NET_BIND_SERVICE is harmless
@@ -78,15 +78,15 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  my-croc-rendezvous:
+  worddrop-rendezvous:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.rendezvous
       args:
-        APT_MIRROR: "${MY_CROC_APT_MIRROR:-}"
-        CARGO_REGISTRY: "${MY_CROC_CARGO_REGISTRY:-}"
-    image: my-croc/rendezvous:0.2.0
-    container_name: my-croc-rendezvous
+        APT_MIRROR: "${WORDDROP_APT_MIRROR:-}"
+        CARGO_REGISTRY: "${WORDDROP_CARGO_REGISTRY:-}"
+    image: worddrop/rendezvous:0.2.0
+    container_name: worddrop-rendezvous
     restart: unless-stopped
     # Hardening (T5): non-root uid 10002 (Dockerfile USER) + no-new-privileges
     # + mem cap + init. Binds 8080 (> 1024) — no NET_BIND_SERVICE needed.
@@ -96,8 +96,8 @@ services:
     init: true
     environment:
       # MUST be 0.0.0.0 inside the container (binary default is 127.0.0.1).
-      MY_CROC_RENDEZVOUS_ADDR: "0.0.0.0:8080"
-      # Optional: RUST_LOG=my_croc_rendezvous=info
+      WORDDROP_RENDEZVOUS_ADDR: "0.0.0.0:8080"
+      # Optional: RUST_LOG=worddrop_rendezvous=info
     ports:
       # Kept published: the LAN dev path (and T8's LAN step) uses host
       # http://<host>:8080 directly. Public access is TLS-terminated by Caddy.
@@ -116,7 +116,7 @@ services:
 
   caddy:
     image: caddy:2
-    container_name: my-croc-caddy
+    container_name: worddrop-caddy
     restart: unless-stopped
     # Runs as root INTENTIONALLY (caddy:2 image has no non-root user and Caddy
     # must bind host 80/443) — excluded from the non-root requirement (T5),
@@ -135,7 +135,7 @@ services:
       - caddy-data:/data       # LE certs persist across recreates (cert-loss fix)
       - caddy-config:/config
     depends_on:
-      my-croc-rendezvous:
+      worddrop-rendezvous:
         condition: service_healthy
       iroh-relay:
         condition: service_started
@@ -143,7 +143,7 @@ services:
       # Probe /health, NOT /: the rendezvous router has no / route (only
       # /health + /v1/pairs*), so / returns axum 404 -> curl -f exit 22 ->
       # unhealthy forever. The Host header routes Caddy's own request through
-      # the pair site block to my-croc-rendezvous:8080/health ("ok").
+      # the pair site block to worddrop-rendezvous:8080/health ("ok").
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1/health", "-H", "Host: pair.worddrop.cloud"]
       interval: 30s
       timeout: 5s
@@ -160,11 +160,11 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.iroh-relay
       args:
-        APT_MIRROR: "${MY_CROC_APT_MIRROR:-}"
-        CARGO_REGISTRY: "${MY_CROC_CARGO_REGISTRY:-}"
-        CARGO_BUILD_JOBS: "${MY_CROC_CARGO_JOBS:-2}"
-    image: my-croc/iroh-relay:0.2.0
-    container_name: my-croc-iroh-relay-dev
+        APT_MIRROR: "${WORDDROP_APT_MIRROR:-}"
+        CARGO_REGISTRY: "${WORDDROP_CARGO_REGISTRY:-}"
+        CARGO_BUILD_JOBS: "${WORDDROP_CARGO_JOBS:-2}"
+    image: worddrop/iroh-relay:0.2.0
+    container_name: worddrop-iroh-relay-dev
     restart: unless-stopped
     # HARDENED identically to the prod relay (T5 decision, recorded in
     # evidence): same image -> same non-root uid 10001 via the Dockerfile USER.

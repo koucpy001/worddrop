@@ -1,4 +1,4 @@
-# WordDrop（my-croc）
+# WordDrop
 
 跨平台 WAN 文件传输：Windows GUI、macOS GUI、Linux CLI、Android。通过一段简短的
 单词配对码（`nameplate-word-word-word`）配对，文件端到端加密传输，支持中断续传。
@@ -28,15 +28,15 @@ for stable transfers.
 - 原计划（`.omo/plans/my-croc.md`）**29/29 全部完成**：25 个实现 todos + F1-F4 最终验证 wave。
 - 核心逻辑、CLI、GUI、Android APK、部署产物全部本地构建并测试通过；生产服务已上线
   worddrop.cloud（TLS 由 Caddy 终结，见[部署指南](#deployment-guide-部署指南)）。
-- 仓库已公开（[github.com/koucpy001/my_croc](https://github.com/koucpy001/my_croc)），
+- 仓库已公开（[github.com/koucpy001/worddrop](https://github.com/koucpy001/worddrop)），
   CI 三平台（ubuntu / windows / macos）全绿——主分支 run
-  [31554042951](https://github.com/koucpy001/my_croc/actions/runs/31554042951) 与
-  tag v0.2.0 run [31555395399](https://github.com/koucpy001/my_croc/actions/runs/31555395399)
+  [31554042951](https://github.com/koucpy001/worddrop/actions/runs/31554042951) 与
+  tag v0.2.0 run [31555395399](https://github.com/koucpy001/worddrop/actions/runs/31555395399)
   均 success。预编译产物见 [Release v0.2.0](#download-下载)。
 - Android 真机测试清单已于 2026-08-12 在 vivo <DEVICE_MODEL> 上实际执行（T8）：安装、权限、
   地址配置等步骤 1-4 通过；传输类步骤 5-7 因手机侧网络路径问题阻塞，传输未经受验证
   （详见下方清单与 `.omo/evidence/my-croc-prod/task-8-my-croc-prod.txt`）。
-- 版本：CLI `my-croc 0.2.0`（编译期 `CARGO_PKG_VERSION`），Flutter app `0.2.0+1`。
+- 版本：CLI `worddrop 0.2.0`（编译期 `CARGO_PKG_VERSION`），Flutter app `0.2.0+1`。
 - 已知目标偏差（诚实记录）：CLI 二进制 ~10MB（iroh 依赖树，<5MB 目标未达）；
   APK 83MB（3-ABI cdylib + Flutter engine，<25MB 目标未达）。详见 `.omo/evidence/my-croc/`。
 
@@ -50,16 +50,16 @@ for stable transfers.
 
 ## Download (下载)
 
-Release v0.2.0：<https://github.com/koucpy001/my_croc/releases/tag/v0.2.0>
+Release v0.2.0：<https://github.com/koucpy001/worddrop/releases/tag/v0.2.0>
 （仓库已公开；v* tag 推送自动触发 3-OS 构建并发布到 Release）
 
 | 资产 | 平台 | 说明 |
 | :--- | :--- | :--- |
-| `my-croc-linux-cli.zip` | Linux x86_64 | CLI（`my-croc`） |
-| `my-croc-linux-app.zip` | Linux x86_64 | Flutter GUI（Linux desktop） |
-| `my-croc-windows-cli.zip` | Windows x86_64 | CLI（`my-croc.exe`） |
-| `my-croc-windows-app.zip` | Windows x86_64 | Flutter GUI |
-| `my-croc-macos-app.zip` | macOS | Flutter GUI（未签名） |
+| `worddrop-linux-cli.zip` | Linux x86_64 | CLI（`worddrop`） |
+| `worddrop-linux-app.zip` | Linux x86_64 | Flutter GUI（Linux desktop） |
+| `worddrop-windows-cli.zip` | Windows x86_64 | CLI（`worddrop.exe`） |
+| `worddrop-windows-app.zip` | Windows x86_64 | Flutter GUI |
+| `worddrop-macos-app.zip` | macOS | Flutter GUI（未签名） |
 | `app-release.apk` | Android（arm64-v8a / armeabi-v7a / x86_64） | release 签名 APK（CN=WordDrop，可直接安装） |
 | `sha256sums.txt` | - | 前五个 zip 的 sha256 校验清单 |
 
@@ -70,7 +70,7 @@ Release v0.2.0：<https://github.com/koucpy001/my_croc/releases/tag/v0.2.0>
 
 ### Linux CLI
 
-版本从 `cargo build` 时的 `Cargo.toml` 编译进二进制（`my-croc --version`），无运行时 env 覆盖。
+版本从 `cargo build` 时的 `Cargo.toml` 编译进二进制（`worddrop --version`），无运行时 env 覆盖。
 
 两种方式任选其一：
 
@@ -78,14 +78,14 @@ Release v0.2.0：<https://github.com/koucpy001/my_croc/releases/tag/v0.2.0>
 
    ```sh
    cargo build --release -j 2          # release profile: opt-level=z, lto, strip
-   install -m 0755 target/release/my-croc ~/.local/bin/
+   install -m 0755 target/release/worddrop ~/.local/bin/
    ```
 
-2. 下载预编译二进制：从 [Release v0.2.0](https://github.com/koucpy001/my_croc/releases/tag/v0.2.0)
-   下载 `my-croc-linux-cli.zip`，解压后 `chmod +x my-croc` 并放入 `PATH`。
+2. 下载预编译二进制：从 [Release v0.2.0](https://github.com/koucpy001/worddrop/releases/tag/v0.2.0)
+   下载 `worddrop-linux-cli.zip`，解压后 `chmod +x worddrop` 并放入 `PATH`。
    本机不提供静态链接（依赖系统 glibc）。
 
-用法：`my-croc send <file...>` / `my-croc receive --code <word-code>`（详见 `--help`）。
+用法：`worddrop send <file...>` / `worddrop receive --code <word-code>`（详见 `--help`）。
 
 ### Android（APK / AAB）
 
@@ -102,9 +102,9 @@ Release 里的 `app-release.apk` 是正式签名包。
 
 ### Windows / macOS GUI（Release 构建，未签名）
 
-本开发机为 Linux 主机，无法本地构建 Windows/macOS 目标——`my-croc.exe` 与
+本开发机为 Linux 主机，无法本地构建 Windows/macOS 目标——`worddrop.exe` 与
 macOS `.app` 由 GitHub Actions 在 v* tag 推送时自动构建并发布到
-[Release](https://github.com/koucpy001/my_croc/releases)（见 [Download](#download-下载)）。
+[Release](https://github.com/koucpy001/worddrop/releases)（见 [Download](#download-下载)）。
 两个平台均为**未签名**构建，安装时会有系统警告：
 
 - **Windows**：SmartScreen 会提示"未知发布者"。点击"更多信息" → "仍要运行"即可
@@ -120,14 +120,14 @@ macOS `.app` 由 GitHub Actions 在 v* tag 推送时自动构建并发布到
 发送方（会打印一行配对码）：
 
 ```sh
-my-croc send ~/photos/vacation/ ~/notes.txt
+worddrop send ~/photos/vacation/ ~/notes.txt
 ```
 
 接收方（交互输入配对码，或直接用 `--code` 指定）：
 
 ```sh
-my-croc receive
-my-croc receive --code 7-correct-horse-battery --output ~/Downloads
+worddrop receive
+worddrop receive --code 7-correct-horse-battery --output ~/Downloads
 ```
 
 输出示例（发送方，非 TTY 下进度自动降级为纯文本行）：
@@ -155,28 +155,28 @@ my-croc receive --code 7-correct-horse-battery --output ~/Downloads
 
 ```sh
 # 方式一：环境变量
-export MY_CROC_RENDEZVOUS_URL=https://pair.worddrop.cloud
-export MY_CROC_RELAY_URL=https://relay.worddrop.cloud
+export WORDDROP_RENDEZVOUS_URL=https://pair.worddrop.cloud
+export WORDDROP_RELAY_URL=https://relay.worddrop.cloud
 
 # 方式二：配置文件（config.toml，保存在配置目录）
-my-croc config set rendezvous_url https://pair.worddrop.cloud
-my-croc config set relay_url https://relay.worddrop.cloud
-my-croc config get          # 查看生效配置（env > file > default）
+worddrop config set rendezvous_url https://pair.worddrop.cloud
+worddrop config set relay_url https://relay.worddrop.cloud
+worddrop config get          # 查看生效配置（env > file > default）
 ```
 
 **开发 / 局域网（LAN dev 路径）**：
 
 ```sh
-export MY_CROC_RENDEZVOUS_URL=http://<host>:8080
-export MY_CROC_RELAY_URL=http://<host>:3340
+export WORDDROP_RENDEZVOUS_URL=http://<host>:8080
+export WORDDROP_RELAY_URL=http://<host>:3340
 ```
 
 | 配置项 | 环境变量 | 默认值 |
 | :--- | :--- | :--- |
-| rendezvous URL | `MY_CROC_RENDEZVOUS_URL` | `http://127.0.0.1:8080` |
-| relay URL | `MY_CROC_RELAY_URL` | `http://127.0.0.1:3340` |
-| 数据目录 | `MY_CROC_DATA_DIR` | 配置目录（按 send/receive 角色分子目录） |
-| 配置目录 | `MY_CROC_CONFIG_DIR` | 平台默认配置目录 |
+| rendezvous URL | `WORDDROP_RENDEZVOUS_URL` | `http://127.0.0.1:8080` |
+| relay URL | `WORDDROP_RELAY_URL` | `http://127.0.0.1:3340` |
+| 数据目录 | `WORDDROP_DATA_DIR` | 配置目录（按 send/receive 角色分子目录） |
+| 配置目录 | `WORDDROP_CONFIG_DIR` | 平台默认配置目录 |
 
 GUI：设置页（设置 tab）填写 rendezvous / relay 地址，与 CLI 同一份配置（填上面的
 生产或开发地址均可）。
@@ -203,7 +203,7 @@ Android 设备上的服务地址**不能写 `127.0.0.1`**，须填宿主机的�
 │  Sender             │   │  Receiver           │
 │  CLI / Flutter GUI  │   │  CLI / Flutter GUI  │
 │  ┌───────────────┐  │   │  ┌───────────────┐  │
-│  │  my-croc-core │  │   │  │  my-croc-core │  │
+│  │  worddrop-core │  │   │  │  worddrop-core │  │
 │  │  (SPAKE2,     │  │   │  │  (SPAKE2,     │  │
 │  │  session,     │  │   │  │  session,     │  │
 │  │  iroh blobs)  │  │   │  │  iroh blobs)  │  │
@@ -213,7 +213,7 @@ Android 设备上的服务地址**不能写 `127.0.0.1`**，须填宿主机的�
            │   (数字, 无单词)          │
            ▼                          ▼
      ┌─────────────────────────────────────┐
-     │  my-croc-rendezvous (配对信箱)        │
+     │  worddrop-rendezvous (配对信箱)        │
      │  code <-> ticket · one-shot claim   │
      │  TTL 600s · rate limits · /health   │
      └─────────────────────────────────────┘
@@ -284,7 +284,7 @@ words（真正的密码）只存在于两端客户端之间、经 SPAKE2 协商�
 
 - 单词即 PAKE（Password-Authenticated Key Exchange）密码，两端用
   `spake2 0.4.0` 的 `start_symmetric` 各发一条 33 字节消息，派生 32 字节会话密钥。
-- 随后做 **HKDF key confirmation**（16 字节确认令牌，info 为 `my-croc/confirm`）：
+- 随后做 **HKDF key confirmation**（16 字节确认令牌，info 为 `worddrop/confirm`）：
   只有单词完全一致的两端才能通过确认。单词不一致 → 确认失败
   （`ConfirmationMismatch`）→ 配对终止，不传输任何数据。
 - PAKE 的性质：密码从不以可离线破解的形式出现在线上（无明文传输、无字典攻击面）。
@@ -337,7 +337,7 @@ words（真正的密码）只存在于两端客户端之间、经 SPAKE2 协商�
 
 | 服务 | 作用 | dev（LAN） | 生产（worddrop.cloud） |
 | :--- | :--- | :--- | :--- |
-| `my-croc-rendezvous` | 配对信箱（axum，`code <-> ticket`） | 8080 (HTTP) | 由 Caddy 反代为 `https://pair.worddrop.cloud` |
+| `worddrop-rendezvous` | 配对信箱（axum，`code <-> ticket`） | 8080 (HTTP) | 由 Caddy 反代为 `https://pair.worddrop.cloud` |
 | `iroh-relay 1.0.3` | 传输中继（iroh，HTTP/WS 代理） | 3340 (HTTP, `--dev`) | 容器内 :80 纯 HTTP，由 Caddy 反代为 `https://relay.worddrop.cloud` |
 | Caddy | TLS 终结（仅生产） | - | 独占宿主机 80/443 TCP，签发并持有两个域名的 LE 证书 |
 
@@ -359,10 +359,10 @@ curl -fsSL https://pair.worddrop.cloud/health    # 生产：ok
 ### 方式二：systemd（裸机）
 
 ```sh
-sudo install -m 0755 my-croc-rendezvous iroh-relay /usr/local/bin/
-sudo useradd --system --home /var/lib/my-croc --shell /usr/sbin/nologin my-croc
-sudo install -m 0644 my-croc-rendezvous.service iroh-relay.service /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable --now my-croc-rendezvous iroh-relay
+sudo install -m 0755 worddrop-rendezvous iroh-relay /usr/local/bin/
+sudo useradd --system --home /var/lib/worddrop --shell /usr/sbin/nologin worddrop
+sudo install -m 0644 worddrop-rendezvous.service iroh-relay.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now worddrop-rendezvous iroh-relay
 ```
 
 两个 unit 均为 `Restart=always` + 最小权限硬化（`ProtectSystem=strict`、`PrivateTmp`、专用用户）。
@@ -375,13 +375,13 @@ sudo systemctl daemon-reload && sudo systemctl enable --now my-croc-rendezvous i
   Caddy 拥有 :80 所以可以完成签发；证书持久化在 `caddy-data` 卷），并把
   `relay.worddrop.cloud`（含 WebSocket /relay，Caddy 自动处理 WS 升级）反代到
   relay :80、`pair.worddrop.cloud` 反代到 rendezvous :8080。客户端
-  `MY_CROC_RELAY_URL=https://relay.worddrop.cloud`、`MY_CROC_RENDEZVOUS_URL=https://pair.worddrop.cloud`。
+  `WORDDROP_RELAY_URL=https://relay.worddrop.cloud`、`WORDDROP_RENDEZVOUS_URL=https://pair.worddrop.cloud`。
 - **为什么 relay 不自带 TLS（架构事实）**：iroh-relay 1.0.3 配置 `[tls]` 段后，
   :80 会退化成只返回 404 的 captive portal，完整协议移到内部 :443；而它内置的
   ACME（tokio-rustls-acme 0.9.1）只支持 TLS-ALPN-01、没有 HTTP-01——在 Caddy 独占
   443 时签发永远无法完成。因此正确设计就是上面的 Caddy 终结方案。
 - **开发**：relay `--dev` 纯 HTTP（端口 3340，无需证书）——本仓库所有本地测试
-  均用此方式。**注意**：自签名 HTTPS relay **无法**被未改动的 my-croc 客户端信任
+  均用此方式。**注意**：自签名 HTTPS relay **无法**被未改动的 worddrop 客户端信任
   （iroh 1.0.3 只用内置 webpki roots，无自定义 CA/关闭校验开关）——想验证 TLS
   全链路只能配真实域名 + Let's Encrypt。详见 `deploy/README.md` 的 TLS 章节。
 
@@ -456,11 +456,11 @@ cargo install iroh-relay --version 1.0.3 --features server --jobs 2
 iroh-relay --dev
 
 # 2. 起 rendezvous（默认 127.0.0.1:8080）
-my-croc-rendezvous
+worddrop-rendezvous
 
 # 3. 两个终端分别发送/接收
-my-croc send <path>
-my-croc receive --code <word-code>
+worddrop send <path>
+worddrop receive --code <word-code>
 ```
 
 内存紧张的主机（如本机 3.6GB）请用 `-j 2` 构建；send 与 receive 的数据目录
@@ -474,12 +474,12 @@ my-croc receive --code <word-code>
 cargo test --workspace -j 2          # 190 tests，全绿
 
 # 指定 crate（core / cli / rendezvous）
-cargo test -p my-croc-core -j 2
-cargo test -p my-croc-cli -j 2
-cargo test -p my-croc-rendezvous -j 2
+cargo test -p worddrop-core -j 2
+cargo test -p worddrop-cli -j 2
+cargo test -p worddrop-rendezvous -j 2
 
 # 桥接层（FRB bridge，独立 workspace）
-cargo test -j 2 -p my_croc_bridge --manifest-path flutter/rust/Cargo.toml   # 17 tests
+cargo test -j 2 -p worddrop_bridge --manifest-path flutter/rust/Cargo.toml   # 17 tests
 
 # Flutter widget 测试（免 cdylib，注入 fake backend，hermetic）
 cd flutter/app && flutter test        # 35 tests + flutter analyze 0 issues

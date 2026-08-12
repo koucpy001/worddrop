@@ -130,9 +130,9 @@ mod tests {
 
     #[test]
     fn hex_roundtrip() {
-        let bytes = b"\x00\x01\xab\xffmy-croc";
+        let bytes = b"\x00\x01\xab\xffworddrop";
         let encoded = super::hex_encode(bytes);
-        assert_eq!(encoded, "0001abff6d792d63726f63");
+        assert_eq!(encoded, "0001abff776f726464726f70");
         assert_eq!(super::hex_decode(&encoded).unwrap(), bytes);
     }
 }

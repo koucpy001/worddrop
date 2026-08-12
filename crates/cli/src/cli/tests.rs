@@ -7,7 +7,7 @@ use clap::{CommandFactory, Parser, error::ErrorKind};
 use super::{Cli, Commands, ReceiveArgs};
 
 fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
-    Cli::try_parse_from(std::iter::once("my-croc").chain(args.iter().copied()))
+    Cli::try_parse_from(std::iter::once("worddrop").chain(args.iter().copied()))
 }
 
 #[test]

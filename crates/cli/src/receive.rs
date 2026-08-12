@@ -20,16 +20,16 @@ use indicatif::ProgressBar;
 use iroh::RelayMode;
 use iroh_blobs::ticket::BlobTicket;
 
-use my_croc_core::pairing::spake::SpakeError;
-use my_croc_core::pairing::wordcode::{WordCode, WordCodeError};
-use my_croc_core::session::Session;
-use my_croc_core::session::control::{
+use worddrop_core::pairing::spake::SpakeError;
+use worddrop_core::pairing::wordcode::{WordCode, WordCodeError};
+use worddrop_core::session::Session;
+use worddrop_core::session::control::{
     ControlMessage, HANDSHAKE_TIMEOUT, PROTOCOL_VERSION, recv_message_timeout, send_message,
 };
-use my_croc_core::session::state::{Transition, TransitionError};
-use my_croc_core::transfer::engine::{EngineSpec, TransferEngine};
-use my_croc_core::transfer::receive::{ReceiveError, ReceiveOptions, ReceiveProgress};
-use my_croc_core::transfer::record::RecordStore;
+use worddrop_core::session::state::{Transition, TransitionError};
+use worddrop_core::transfer::engine::{EngineSpec, TransferEngine};
+use worddrop_core::transfer::receive::{ReceiveError, ReceiveOptions, ReceiveProgress};
+use worddrop_core::transfer::record::RecordStore;
 
 use crate::rendezvous_client::{RvClient, RvError};
 use crate::ui::{PlainBar, UiBar, bar_style, human_bytes, spinner_style};
@@ -62,13 +62,13 @@ pub enum RecvError {
     /// Failed to parse the claim response as a ticket.
     Ticket(String),
     /// Engine construction failed.
-    Engine(my_croc_core::transfer::engine::Error),
+    Engine(worddrop_core::transfer::engine::Error),
     /// The relay did not become contactable within the timeout.
     RelayHung,
     /// Pairing control exchange failed.
     Pair(wire::PairError),
     /// Control message send failed.
-    Control(my_croc_core::session::control::SessionError),
+    Control(worddrop_core::session::control::SessionError),
     /// Illegal session transition.
     Transition(TransitionError),
     /// A message of the wrong kind arrived.
@@ -138,8 +138,8 @@ impl From<RvError> for RecvError {
         Self::Rv(err)
     }
 }
-impl From<my_croc_core::transfer::engine::Error> for RecvError {
-    fn from(err: my_croc_core::transfer::engine::Error) -> Self {
+impl From<worddrop_core::transfer::engine::Error> for RecvError {
+    fn from(err: worddrop_core::transfer::engine::Error) -> Self {
         Self::Engine(err)
     }
 }
@@ -148,8 +148,8 @@ impl From<wire::PairError> for RecvError {
         Self::Pair(err)
     }
 }
-impl From<my_croc_core::session::control::SessionError> for RecvError {
-    fn from(err: my_croc_core::session::control::SessionError) -> Self {
+impl From<worddrop_core::session::control::SessionError> for RecvError {
+    fn from(err: worddrop_core::session::control::SessionError) -> Self {
         Self::Control(err)
     }
 }
@@ -515,7 +515,7 @@ async fn check_resume(data_dir: &Path, ticket: &BlobTicket, target_dir: &Path) -
 }
 
 /// Display the offer to the user: file names + total bytes.
-fn display_offer(files: &[my_croc_core::session::control::FileMeta], total_bytes: u64) {
+fn display_offer(files: &[worddrop_core::session::control::FileMeta], total_bytes: u64) {
     eprintln!(
         "发送方发来了 {} 个文件（{}） / Sender offers {} files ({} total):",
         files.len(),

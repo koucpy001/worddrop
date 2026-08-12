@@ -1,4 +1,4 @@
-# my-croc CI (plan T22 + T2): Linux/Windows/macOS build + test gate, plus a
+# worddrop CI (plan T22 + T2): Linux/Windows/macOS build + test gate, plus a
 # tag-triggered GitHub Release job.
 #
 # Three build jobs, one per OS:
@@ -133,14 +133,14 @@ jobs:
       - name: Upload Linux CLI binary
         uses: actions/upload-artifact@v4
         with:
-          name: my-croc-linux-cli
-          path: target/release/my-croc
+          name: worddrop-linux-cli
+          path: target/release/worddrop
           if-no-files-found: error
 
       - name: Upload Linux app bundle
         uses: actions/upload-artifact@v4
         with:
-          name: my-croc-linux-app
+          name: worddrop-linux-app
           path: flutter/app/build/linux/x64/release/bundle
           if-no-files-found: error
 
@@ -213,14 +213,14 @@ jobs:
       - name: Upload Windows CLI binary
         uses: actions/upload-artifact@v4
         with:
-          name: my-croc-windows-cli
-          path: target/release/my-croc.exe
+          name: worddrop-windows-cli
+          path: target/release/worddrop.exe
           if-no-files-found: error
 
       - name: Upload Windows app bundle
         uses: actions/upload-artifact@v4
         with:
-          name: my-croc-windows-app
+          name: worddrop-windows-app
           path: flutter/app/build/windows/x64/runner/Release
           if-no-files-found: error
 
@@ -285,7 +285,7 @@ jobs:
       - name: Upload macOS app bundle
         uses: actions/upload-artifact@v4
         with:
-          name: my-croc-macos-app
+          name: worddrop-macos-app
           path: flutter/app/build/macos/Build/Products/Release/*.app
           if-no-files-found: error
 
@@ -310,36 +310,36 @@ jobs:
       - name: Download Linux CLI artifact
         uses: actions/download-artifact@v4
         with:
-          name: my-croc-linux-cli
-          path: artifacts/my-croc-linux-cli
+          name: worddrop-linux-cli
+          path: artifacts/worddrop-linux-cli
           if-no-files-found: error
 
       - name: Download Linux app bundle artifact
         uses: actions/download-artifact@v4
         with:
-          name: my-croc-linux-app
-          path: artifacts/my-croc-linux-app
+          name: worddrop-linux-app
+          path: artifacts/worddrop-linux-app
           if-no-files-found: error
 
       - name: Download Windows CLI artifact
         uses: actions/download-artifact@v4
         with:
-          name: my-croc-windows-cli
-          path: artifacts/my-croc-windows-cli
+          name: worddrop-windows-cli
+          path: artifacts/worddrop-windows-cli
           if-no-files-found: error
 
       - name: Download Windows app bundle artifact
         uses: actions/download-artifact@v4
         with:
-          name: my-croc-windows-app
-          path: artifacts/my-croc-windows-app
+          name: worddrop-windows-app
+          path: artifacts/worddrop-windows-app
           if-no-files-found: error
 
       - name: Download macOS app bundle artifact
         uses: actions/download-artifact@v4
         with:
-          name: my-croc-macos-app
-          path: artifacts/my-croc-macos-app
+          name: worddrop-macos-app
+          path: artifacts/worddrop-macos-app
           if-no-files-found: error
 
       # One zip per artifact (bundles are directories; sha256sum cannot hash
@@ -348,11 +348,11 @@ jobs:
       - name: Package artifacts into zips (one per platform)
         working-directory: artifacts
         run: |
-          zip -r -q my-croc-linux-cli.zip my-croc-linux-cli
-          zip -r -q my-croc-linux-app.zip my-croc-linux-app
-          zip -r -q my-croc-windows-cli.zip my-croc-windows-cli
-          zip -r -q my-croc-windows-app.zip my-croc-windows-app
-          zip -r -q my-croc-macos-app.zip my-croc-macos-app
+          zip -r -q worddrop-linux-cli.zip worddrop-linux-cli
+          zip -r -q worddrop-linux-app.zip worddrop-linux-app
+          zip -r -q worddrop-windows-cli.zip worddrop-windows-cli
+          zip -r -q worddrop-windows-app.zip worddrop-windows-app
+          zip -r -q worddrop-macos-app.zip worddrop-macos-app
 
       - name: Generate sha256sums.txt
         working-directory: artifacts
@@ -362,14 +362,14 @@ jobs:
         run: |
           TAG="${{ github.ref_name }}"
           {
-            echo "## my-croc ${TAG}"
+            echo "## worddrop ${TAG}"
             echo ""
             echo "Platform artifacts (SHA-256 checksums in sha256sums.txt):"
-            echo "- my-croc-linux-cli.zip — Linux CLI"
-            echo "- my-croc-linux-app.zip — Linux desktop GUI"
-            echo "- my-croc-windows-cli.zip — Windows CLI"
-            echo "- my-croc-windows-app.zip — Windows GUI"
-            echo "- my-croc-macos-app.zip — macOS GUI"
+            echo "- worddrop-linux-cli.zip — Linux CLI"
+            echo "- worddrop-linux-app.zip — Linux desktop GUI"
+            echo "- worddrop-windows-cli.zip — Windows CLI"
+            echo "- worddrop-windows-app.zip — Windows GUI"
+            echo "- worddrop-macos-app.zip — macOS GUI"
             echo ""
             echo "### Changelog"
             PREV_TAG="$(git tag --sort=-version:refname | sed -n '2p')"
@@ -384,10 +384,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/my-croc-linux-cli.zip
-            artifacts/my-croc-linux-app.zip
-            artifacts/my-croc-windows-cli.zip
-            artifacts/my-croc-windows-app.zip
-            artifacts/my-croc-macos-app.zip
+            artifacts/worddrop-linux-cli.zip
+            artifacts/worddrop-linux-app.zip
+            artifacts/worddrop-windows-cli.zip
+            artifacts/worddrop-windows-app.zip
+            artifacts/worddrop-macos-app.zip
             artifacts/sha256sums.txt
           body_path: release-body.md

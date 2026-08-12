@@ -1,15 +1,15 @@
-//! my-croc CLI entry point: parse, init tracing, dispatch, map errors to exit
+//! worddrop CLI entry point: parse, init tracing, dispatch, map errors to exit
 //! codes (0 = ok, 1 = user error, 2 = runtime).
 
 use std::process::ExitCode;
 
 use clap::Parser;
-use my_croc_cli::cli::Cli;
-use my_croc_cli::commands;
+use worddrop_cli::cli::Cli;
+use worddrop_cli::commands;
 use tracing_subscriber::EnvFilter;
 
 fn main() -> ExitCode {
-    my_croc_core::transfer::engine::install_tls_provider();
+    worddrop_core::transfer::engine::install_tls_provider();
     let args = match Cli::try_parse() {
         Ok(args) => args,
         Err(err) => return print_parse_error(err),

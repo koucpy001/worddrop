@@ -1,9 +1,9 @@
-# my-croc-rendezvous — axum mailbox server
+# worddrop-rendezvous — axum mailbox server
 # Code <-> ticket mailbox: allocate numeric nameplate (1-9999), one-shot claim,
 # 600s TTL, per-IP rate limits. Server sees ONLY the nameplate, never the words.
 
 [package]
-name = "my-croc-rendezvous"
+name = "worddrop-rendezvous"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

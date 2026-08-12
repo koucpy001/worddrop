@@ -1,18 +1,18 @@
-# my-croc flutter_rust_bridge bridge crate (drift_bridge pattern).
+# worddrop flutter_rust_bridge bridge crate (drift_bridge pattern).
 #
 # Standalone workspace on purpose: FRB codegen + cargokit build this crate
-# independently of the root my-croc workspace (same layout as drift's
+# independently of the root worddrop workspace (same layout as drift's
 # flutter/rust crate). The root rust-toolchain.toml (1.97.1) still applies
 # because rustup walks up from this directory.
 #
-# NOTE: package name MUST use underscores (my_croc_bridge), not dashes:
+# NOTE: package name MUST use underscores (worddrop_bridge), not dashes:
 # cargokit derives the artifact name from the package name, while cargo
 # replaces dashes with underscores in the cdylib file name, so a dash-name
-# crate would produce libmy-croc-bridge.so while cargokit looks for
-# libmy_croc_bridge.so (drift_bridge uses the same underscore convention).
+# crate would produce libworddrop-bridge.so while cargokit looks for
+# libworddrop_bridge.so (drift_bridge uses the same underscore convention).
 
 [package]
-name = "my_croc_bridge"
+name = "worddrop_bridge"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.97"
@@ -26,13 +26,13 @@ crate-type = ["cdylib", "staticlib"]
 flutter_rust_bridge = "=2.12.0"
 serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
-# T17: real my-croc API surface. Core for engine/session/wordcode, cli for the
+# T17: real worddrop API surface. Core for engine/session/wordcode, cli for the
 # wire helpers (ControlAcceptor, SPAKE2 sides, hello, peer-close) + rendezvous
 # client + config file — the bridge is a thin facade reusing the CLI's proven
 # pieces (no logic duplicated). iroh/iroh-blobs only for RelayMode/BlobTicket
 # (DTOs never leak iroh types to Dart); rand for WordCode::generate.
-my-croc-core = { path = "../../crates/core" }
-my-croc-cli = { path = "../../crates/cli" }
+worddrop-core = { path = "../../crates/core" }
+worddrop-cli = { path = "../../crates/cli" }
 iroh = "1.0.3"
 iroh-blobs = "0.103"
 rand = "0.9"
@@ -40,7 +40,7 @@ rand = "0.9"
 [dev-dependencies]
 # T17 e2e: spawn the real T6 rendezvous server in-process on an ephemeral port
 # (same dev-dep pattern as crates/cli/tests).
-my-croc-rendezvous = { path = "../../crates/rendezvous" }
+worddrop-rendezvous = { path = "../../crates/rendezvous" }
 
 [profile.release]
 # T22 windows CI: ThinLTO + codegen-units=1 over the iroh tree OOMs the MSVC

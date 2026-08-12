@@ -1,4 +1,4 @@
-// my-croc GUI entry. Wires the live bridge backend; the `MY_CROC_DEMO_MODE`
+// WordDrop GUI entry. Wires the live bridge backend; the `WORDDROP_DEMO_MODE`
 // env var switches to the scripted demo backend for headless manual QA of
 // every screen state without a peer.
 
@@ -13,7 +13,7 @@ import 'package:app/src/rust/api/session.dart' as bridge;
 import 'package:app/src/rust/frb_generated.dart';
 import 'package:app/theme.dart';
 
-bool get _demoMode => Platform.environment['MY_CROC_DEMO_MODE'] == 'true';
+bool get _demoMode => Platform.environment['WORDDROP_DEMO_MODE'] == 'true';
 
 Future<SessionBackend> _backendFactory(bridge.SessionRole role) async {
   if (_demoMode) return DemoPairingBackend(role);

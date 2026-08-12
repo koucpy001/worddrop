@@ -1,12 +1,12 @@
 //! TOML configuration file (T12): load/save with merge over core defaults.
 //!
-//! File location: `<platform-config-dir>/my-croc/config.toml` — the same
+//! File location: `<platform-config-dir>/worddrop/config.toml` — the same
 //! directory core uses for the identity key (see
-//! [`my_croc_core::identity::Config::config_dir`], `MY_CROC_CONFIG_DIR` honored).
+//! [`worddrop_core::identity::Config::config_dir`], `WORDDROP_CONFIG_DIR` honored).
 //!
 //! Precedence, highest first: **env var > config file > built-in default**.
-//! The env vars are the ones core already defines (`MY_CROC_DATA_DIR`,
-//! `MY_CROC_RENDEZVOUS_URL`, `MY_CROC_RELAY_URL`); Android's app-data hook
+//! The env vars are the ones core already defines (`WORDDROP_DATA_DIR`,
+//! `WORDDROP_RENDEZVOUS_URL`, `WORDDROP_RELAY_URL`); Android's app-data hook
 //! goes through the same mechanism, so file settings never fight it.
 
 use std::{
@@ -14,7 +14,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use my_croc_core::identity;
+use worddrop_core::identity;
 use serde::{Deserialize, Serialize};
 
 /// File name of the TOML config inside the config dir.
@@ -37,7 +37,7 @@ pub struct ConfigFile {
 #[derive(Debug)]
 pub enum ConfigError {
     /// No platform config dir could be resolved (identity error carries the
-    /// `MY_CROC_CONFIG_DIR` hint).
+    /// `WORDDROP_CONFIG_DIR` hint).
     NoConfigDir(identity::Error),
     /// Failed to read an existing config file.
     Read { path: PathBuf, source: io::Error },

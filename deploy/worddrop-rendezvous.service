@@ -1,0 +1,32 @@
+# worddrop-rendezvous — axum mailbox server (code <-> ticket pairing).
+#
+# Install on the VPS:
+#   sudo useradd --system --home /var/lib/worddrop --shell /usr/sbin/nologin worddrop
+#   sudo install -m 0755 worddrop-rendezvous /usr/local/bin/
+#   sudo install -m 0644 worddrop-rendezvous.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now worddrop-rendezvous
+
+[Unit]
+Description=worddrop rendezvous server (pairing code mailbox)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=worddrop
+Group=worddrop
+# Bind 0.0.0.0 so the service is reachable beyond localhost; put a reverse
+# proxy (Caddy/nginx) in front for HTTPS in production.
+Environment=WORDDROP_RENDEZVOUS_ADDR=0.0.0.0:8080
+Environment=RUST_LOG=worddrop_rendezvous=info
+ExecStart=/usr/local/bin/worddrop-rendezvous
+Restart=always
+RestartSec=5
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

@@ -149,7 +149,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _UrlField(
           controller: _dataDirController,
           label: '数据目录',
-          hint: '/home/user/.config/my-croc',
+          hint: '/home/user/.config/worddrop',
           icon: Icons.folder_outlined,
           onSaved: (v) => _save('data_dir', v),
         ),

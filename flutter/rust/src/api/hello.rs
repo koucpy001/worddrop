@@ -11,7 +11,7 @@ use crate::api::RUNTIME;
 /// Placeholder sync wrapper: demonstrates the drift `RUNTIME.block_on`
 /// pattern. Returns a greeting so a Dart smoke test can assert on it.
 pub fn hello(name: String) -> String {
-    RUNTIME.block_on(async move { format!("Hello, {name}! This is my-croc's Rust bridge.") })
+    RUNTIME.block_on(async move { format!("Hello, {name}! This is worddrop's Rust bridge.") })
 }
 
 #[cfg(test)]
@@ -22,6 +22,6 @@ mod tests {
     fn hello_returns_greeting() {
         let greeting = hello("world".to_owned());
         assert!(greeting.starts_with("Hello, world!"), "got: {greeting}");
-        assert!(greeting.contains("my-croc"));
+        assert!(greeting.contains("worddrop"));
     }
 }

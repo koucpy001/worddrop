@@ -2,7 +2,7 @@
 //!
 //! Both parties run the identical `Spake2::<Ed25519Group>::start_symmetric`
 //! with the secret word portion of the pairing code as the password and a
-//! fixed application identity (`my-croc/v1`, magic-wormhole appid-style).
+//! fixed application identity (`worddrop/v1`, magic-wormhole appid-style).
 //! The numeric nameplate is deliberately NOT part of the PAKE input: it is
 //! server-visible and must never influence the derived key (Oracle F1).
 //!
@@ -23,13 +23,13 @@ use hkdf::Hkdf;
 use sha2::Sha256;
 use spake2::{Ed25519Group, Identity, Password, Spake2};
 
-/// SPAKE2 symmetric identity shared by all my-croc peers. Binds the derived
+/// SPAKE2 symmetric identity shared by all worddrop peers. Binds the derived
 /// key to this application so keys from unrelated services cannot be swapped
 /// in (SPAKE2 identifier-string role, magic-wormhole appid equivalent).
-pub const APP_IDENTIFIER: &[u8] = b"my-croc/v1";
+pub const APP_IDENTIFIER: &[u8] = b"worddrop/v1";
 
 /// HKDF info string for the key-confirmation token.
-pub const CONFIRM_INFO: &[u8] = b"my-croc/confirm";
+pub const CONFIRM_INFO: &[u8] = b"worddrop/confirm";
 
 /// Length of the Ed25519Group SPAKE2 message (1 side byte + 32-byte point).
 pub const SPAKE_MSG_LEN: usize = 33;
@@ -154,7 +154,7 @@ impl SessionKey {
     }
 
     /// Derive the 16-byte key-confirmation token:
-    /// `HKDF-SHA256(key, info = "my-croc/confirm")`.
+    /// `HKDF-SHA256(key, info = "worddrop/confirm")`.
     pub fn confirm_token(&self) -> [u8; CONFIRM_TOKEN_LEN] {
         let hkdf = Hkdf::<Sha256>::new(None, &self.0);
         let mut token = [0u8; CONFIRM_TOKEN_LEN];

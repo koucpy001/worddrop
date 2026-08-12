@@ -1,4 +1,4 @@
-//! Wire framing for my-croc control messages (T3): u32 LE length-prefixed
+//! Wire framing for worddrop control messages (T3): u32 LE length-prefixed
 //! JSON frames with a 16 MiB cap (mirrors drift's `protocol/wire.rs`).
 //!
 //! Frame layout: `[u32 LE payload length][payload bytes]` where the payload

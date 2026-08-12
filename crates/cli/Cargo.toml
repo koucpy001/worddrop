@@ -1,10 +1,10 @@
-# my-croc-cli — Linux CLI
-# `my-croc send <paths...>` / `my-croc receive [--code CODE] [--output DIR]`,
+# worddrop-cli — Linux CLI
+# `worddrop send <paths...>` / `worddrop receive [--code CODE] [--output DIR]`,
 # word-code pairing + progress UI (indicatif). Send/receive/config commands
 # are all fully implemented (pairing, transfer, resume, exit-code mapping).
 
 [package]
-name = "my-croc-cli"
+name = "worddrop-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,12 +12,12 @@ authors.workspace = true
 rust-version.workspace = true
 
 [[bin]]
-# Binary name is `my-croc` (package name would be `my-croc-cli`).
-name = "my-croc"
+# Binary name is `worddrop` (package name would be `worddrop-cli`).
+name = "worddrop"
 path = "src/main.rs"
 
 [dependencies]
-my-croc-core = { path = "../core" }
+worddrop-core = { path = "../core" }
 clap = { version = "4", features = ["derive"] }
 toml = "1"
 serde = { workspace = true }
@@ -52,7 +52,7 @@ url = "2"
 # T13 tests: spawn the REAL T6 rendezvous server in-process on an ephemeral
 # port, so the CLI's rendezvous client is tested against the shipped server
 # (same dev-dep pattern as crates/core/tests/e2e.rs).
-my-croc-rendezvous = { path = "../rendezvous" }
+worddrop-rendezvous = { path = "../rendezvous" }
 # T13/T14 tests: the fake peer dials via BlobTicket (workspace pin, already in
 # the lockfile via core).
 iroh-blobs = { workspace = true }

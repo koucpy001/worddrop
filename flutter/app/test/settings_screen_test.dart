@@ -32,7 +32,7 @@ Future<String> _noopSetConfig(String key, String value) async => value;
 Future<bridge.ConfigDto> _testConfig() async => bridge.ConfigDto(
       rendezvousUrl: 'http://192.168.1.1:8080',
       relayUrl: 'http://192.168.1.1:3340',
-      dataDir: '/home/user/.config/my-croc',
+      dataDir: '/home/user/.config/worddrop',
       overwrite: false,
     );
 
@@ -64,7 +64,7 @@ void main() {
       // Loaded values in text fields (EditableText may dupe with hint text).
       expect(find.text('http://192.168.1.1:8080'), findsAtLeast(1));
       expect(find.text('http://192.168.1.1:3340'), findsAtLeast(1));
-      expect(find.text('/home/user/.config/my-croc'), findsAtLeast(1));
+      expect(find.text('/home/user/.config/worddrop'), findsAtLeast(1));
 
       // Overwrite subtitle.
       expect(

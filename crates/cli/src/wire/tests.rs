@@ -4,9 +4,9 @@
 
 use tokio::io::{AsyncWriteExt, duplex};
 
-use my_croc_core::pairing::spake::SpakeError;
-use my_croc_core::protocol::wire::WireMessage;
-use my_croc_core::session::control::ControlMessage;
+use worddrop_core::pairing::spake::SpakeError;
+use worddrop_core::protocol::wire::WireMessage;
+use worddrop_core::session::control::ControlMessage;
 
 use super::{PairError, recv_hello, spake_receiver_side, spake_sender_side};
 

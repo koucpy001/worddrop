@@ -1,15 +1,15 @@
-# my-croc 自托管部署 (Self-hosted deployment)
+# worddrop 自托管部署 (Self-hosted deployment)
 
-部署 my-croc 的配对服务（rendezvous）与传输中继（iroh-relay）。两套方案任选：
+部署 worddrop 的配对服务（rendezvous）与传输中继（iroh-relay）。两套方案任选：
 
 | 方案 | 适合 | 文件 |
 | :--- | :--- | :--- |
 | Docker Compose | 一台 VPS 快速起两个容器 | `docker-compose.yml` |
-| systemd | 裸机 / 不想用 Docker | `iroh-relay.service` + `my-croc-rendezvous.service` |
+| systemd | 裸机 / 不想用 Docker | `iroh-relay.service` + `worddrop-rendezvous.service` |
 
 两个服务：
 
-- **my-croc-rendezvous** — 配对信箱：`code <-> ticket`，axum HTTP 服务，`/health` 探活。
+- **worddrop-rendezvous** — 配对信箱：`code <-> ticket`，axum HTTP 服务，`/health` 探活。
 - **iroh-relay 1.0.3** — iroh 传输中继（HTTP/WS 代理；QUIC 入口按设计关闭），客户端打洞失败时走它。
 
 > 部署产物只包含配置模板，**不包含任何 TLS 证书/私钥**——生产证书由 Caddy 首次启动时
@@ -55,7 +55,7 @@ docker compose ps                      # 四个容器 Up (healthy)：relay/rende
 ```sh
 curl -fsSL https://relay.worddrop.cloud/          # "Iroh Relay" 页面（Caddy 终结 TLS）
 curl -fsSL https://pair.worddrop.cloud/health     # ok
-docker exec my-croc-caddy ls /data/caddy/certificates/   # 两个域名的 LE 证书已持久化
+docker exec worddrop-caddy ls /data/caddy/certificates/   # 两个域名的 LE 证书已持久化
 ```
 
 > **本路径已实测（2026-08-12，T1/T4）**：https://relay.worddrop.cloud 返回 "Iroh Relay"
@@ -68,15 +68,15 @@ docker exec my-croc-caddy ls /data/caddy/certificates/   # 两个域名的 LE �
 客户端指向生产服务（两端都要设置）：
 
 ```sh
-export MY_CROC_RENDEZVOUS_URL=https://pair.worddrop.cloud
-export MY_CROC_RELAY_URL=https://relay.worddrop.cloud
+export WORDDROP_RENDEZVOUS_URL=https://pair.worddrop.cloud
+export WORDDROP_RELAY_URL=https://relay.worddrop.cloud
 ```
 
 LAN/dev 客户端指向宿主机：
 
 ```sh
-export MY_CROC_RENDEZVOUS_URL=http://<服务器IP>:8080
-export MY_CROC_RELAY_URL=http://<服务器IP>:3340        # iroh-relay-dev（--dev 模式）
+export WORDDROP_RENDEZVOUS_URL=http://<服务器IP>:8080
+export WORDDROP_RELAY_URL=http://<服务器IP>:3340        # iroh-relay-dev（--dev 模式）
 ```
 
 ### 生产模式说明（Compose 即生产）
@@ -98,22 +98,22 @@ export MY_CROC_RELAY_URL=http://<服务器IP>:3340        # iroh-relay-dev（--d
 
 ```sh
 # 安装二进制（先在本机构建或从 CI 工件下载）
-sudo install -m 0755 my-croc-rendezvous /usr/local/bin/
+sudo install -m 0755 worddrop-rendezvous /usr/local/bin/
 sudo install -m 0755 iroh-relay /usr/local/bin/
 
 # 创建服务用户
-sudo useradd --system --home /var/lib/my-croc --shell /usr/sbin/nologin my-croc
+sudo useradd --system --home /var/lib/worddrop --shell /usr/sbin/nologin worddrop
 sudo useradd --system --home /var/lib/iroh-relay --shell /usr/sbin/nologin iroh-relay
 
 # 安装 unit 文件 + relay 生产配置
-sudo install -m 0644 my-croc-rendezvous.service /etc/systemd/system/
+sudo install -m 0644 worddrop-rendezvous.service /etc/systemd/system/
 sudo install -m 0644 iroh-relay.service /etc/systemd/system/
 sudo install -d -o iroh-relay -g iroh-relay /etc/iroh-relay
 sudo install -m 0640 -o iroh-relay -g iroh-relay iroh-relay.prod.toml /etc/iroh-relay/relay.toml
 
 sudo systemctl daemon-reload
-sudo systemctl enable --now my-croc-rendezvous iroh-relay
-systemctl status my-croc-rendezvous iroh-relay
+sudo systemctl enable --now worddrop-rendezvous iroh-relay
+systemctl status worddrop-rendezvous iroh-relay
 ```
 
 两个 unit 均为 `Restart=always` + 最小权限硬化（`ProtectSystem=strict`、
@@ -130,7 +130,7 @@ systemctl status my-croc-rendezvous iroh-relay
 | :--- | :--- | :--- | :--- |
 | 80 / 443 | TCP | Caddy | **生产唯一需要放行**；Caddy 独占这两个端口终结两个域名的 TLS（80 用于 LE HTTP-01 签发，443 服务客户端的 wss/HTTPS） |
 | 3340 | TCP | iroh-relay-dev | 仅 LAN dev 路径（`--dev`），不对外网开放 |
-| 8080 | TCP | my-croc-rendezvous | 仅 LAN dev 路径；生产由 Caddy 反代，不直接暴露 |
+| 8080 | TCP | worddrop-rendezvous | 仅 LAN dev 路径；生产由 Caddy 反代，不直接暴露 |
 | 9090 | TCP | iroh-relay | 可选 dev metrics（默认发布到宿主机），不对外网开放 |
 
 **没有任何 UDP 端口**：QUIC 地址发现（UDP 7842）需要 relay 侧 TLS，按设计关闭——
@@ -149,9 +149,9 @@ sudo ufw allow 80/tcp 443/tcp
 
 ### 为什么需要 TLS
 
-- **my-croc-rendezvous**：配对信箱。生产必须 HTTPS（防止中间人篡改 code/ticket），
+- **worddrop-rendezvous**：配对信箱。生产必须 HTTPS（防止中间人篡改 code/ticket），
   由 Caddy 反代终结 TLS。
-- **iroh-relay**：客户端（my-croc 使用）把 relay 当成可信传输路径，relay 连接走
+- **iroh-relay**：客户端（worddrop 使用）把 relay 当成可信传输路径，relay 连接走
   WebSocket-over-TLS（wss，客户端填 `https://relay...` 自动转 wss）；没有有效证书，
   客户端无法验证 relay 身份。dev 模式（`--dev`）是纯 HTTP，仅限本机/内网调试。
 
@@ -166,7 +166,7 @@ relay **不自带 TLS**——`deploy/iroh-relay/relay.toml` 只有
   `pair.worddrop.cloud` 的 TLS（HTTP-01 走 :80——因为 Caddy 拥有 :80 才能完成
   签发）；证书持久化在 `caddy-data` 卷，重建容器不丢。
 - `relay.worddrop.cloud`（含 WebSocket /relay，Caddy 自动处理 WS 升级）→ 反代到
-  relay 容器 :80；`pair.worddrop.cloud` → 反代到 `my-croc-rendezvous:8080`。
+  relay 容器 :80；`pair.worddrop.cloud` → 反代到 `worddrop-rendezvous:8080`。
 - 客户端只需把地址指到 HTTPS 域名；iroh 客户端用内置的 Mozilla webpki roots
   验证证书——**证书必须来自公开 CA**（Caddy 的 LE 证书满足）。
 
@@ -175,7 +175,7 @@ relay.worddrop.cloud {
     reverse_proxy iroh-relay:80          # 含 WebSocket /relay（Caddy 自动升级）
 }
 pair.worddrop.cloud {
-    reverse_proxy my-croc-rendezvous:8080
+    reverse_proxy worddrop-rendezvous:8080
 }
 ```
 
@@ -191,13 +191,13 @@ acme-tls/1 握手会打到 Caddy 而不是 relay，签发永远无法完成。�
 ### 开发路径 (b)：本地自签名/无 TLS 的真相
 
 1. **最简单（推荐，本项目全程使用）**：relay 用 `--dev` 跑纯 HTTP——
-   客户端 `MY_CROC_RELAY_URL=http://<host>:3340`，**不需要任何证书**。
+   客户端 `WORDDROP_RELAY_URL=http://<host>:3340`，**不需要任何证书**。
    这就是 compose 默认配置和本地 e2e 用的方式。
 
 2. **自签名证书 + 客户端信任**：iroh 1.0.3 **没有**"关闭证书校验"或"信任自定义 CA"
    的客户端开关——`Endpoint::builder()` 只暴露 `RelayMode::Custom(url)`，relay
    连接用内置 webpki roots 校验（默认 features 不含 `platform-verifier`，装进
-   系统信任库也没用）。因此**自签名 HTTPS relay 无法被未改动的 my-croc 客户端信任**。
+   系统信任库也没用）。因此**自签名 HTTPS relay 无法被未改动的 worddrop 客户端信任**。
 
    结论：本地开发想验证 TLS 全链路，两个现实选项：
    - 用 `--dev` 纯 HTTP（推荐，功能等价，只是没有加密——本机调试可接受）；
@@ -213,22 +213,22 @@ acme-tls/1 握手会打到 Caddy 而不是 relay，签发永远无法完成。�
 
 ```sh
 # 方式一：环境变量
-export MY_CROC_RENDEZVOUS_URL=https://pair.worddrop.cloud
-export MY_CROC_RELAY_URL=https://relay.worddrop.cloud
+export WORDDROP_RENDEZVOUS_URL=https://pair.worddrop.cloud
+export WORDDROP_RELAY_URL=https://relay.worddrop.cloud
 
 # 方式二：配置文件（config.toml；env > file > default）
-my-croc config set rendezvous_url https://pair.worddrop.cloud
-my-croc config set relay_url https://relay.worddrop.cloud
-my-croc config get
+worddrop config set rendezvous_url https://pair.worddrop.cloud
+worddrop config set relay_url https://relay.worddrop.cloud
+worddrop config get
 ```
 
 开发 / 局域网（LAN dev 路径）：`http://<服务器IP>:8080`（rendezvous）+
 `http://<服务器IP>:3340`（iroh-relay-dev，`--dev` 模式），见 §1 的 LAN/dev 示例。
 
-| 配置项 | 环境变量 | 配置文件（`my-croc config set`） |
+| 配置项 | 环境变量 | 配置文件（`worddrop config set`） |
 | :--- | :--- | :--- |
-| rendezvous | `MY_CROC_RENDEZVOUS_URL` | `rendezvous_url` |
-| relay | `MY_CROC_RELAY_URL` | `relay_url` |
+| rendezvous | `WORDDROP_RENDEZVOUS_URL` | `rendezvous_url` |
+| relay | `WORDDROP_RELAY_URL` | `relay_url` |
 
 GUI：设置页填写（与 CLI 同一份配置）。
 

@@ -1,4 +1,4 @@
-//! my-croc-core — shared core library.
+//! worddrop-core — shared core library.
 //!
 //! Pairing (SPAKE2 word-code), session state machine, iroh transfer engine,
 //! persistent identity, resume records. Used by CLI, GUI (via FRB bridge) and Android.

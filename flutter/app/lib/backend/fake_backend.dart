@@ -3,7 +3,7 @@
 // FakePairingBackend: deterministic, test-controlled (Completer-driven) —
 // used by widget tests so `flutter test` stays hermetic (no native cdylib,
 // no rendezvous). DemoPairingBackend: scripted timeline for the manual QA
-// demo mode (MY_CROC_DEMO_MODE dart-define) so every screen state can be
+// demo mode (WORDDROP_DEMO_MODE dart-define) so every screen state can be
 // screenshotted headlessly without a real peer.
 
 import 'dart:async';

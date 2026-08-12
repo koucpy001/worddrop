@@ -25,7 +25,7 @@ static DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 fn temp_dir(tag: &str) -> PathBuf {
     let n = DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!(
-        "my-croc-transfer-test-{tag}-{}-{n}",
+        "worddrop-transfer-test-{tag}-{}-{n}",
         std::process::id()
     ));
     let _ = fs::remove_dir_all(&dir);

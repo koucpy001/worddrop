@@ -6,10 +6,10 @@ use std::{future::Future, time::Duration};
 
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use my_croc_core::session::Session;
-use my_croc_core::session::control::{ControlMessage, send_message};
-use my_croc_core::session::state::Transition;
-use my_croc_core::transfer::engine::TransferEngine;
+use worddrop_core::session::Session;
+use worddrop_core::session::control::{ControlMessage, send_message};
+use worddrop_core::session::state::Transition;
+use worddrop_core::transfer::engine::TransferEngine;
 
 use crate::send::{SendError, SendOutcome};
 use crate::ui::SendUi;

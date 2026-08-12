@@ -1,4 +1,4 @@
-# Docker build context hygiene for the my-croc images.
+# Docker build context hygiene for the worddrop images.
 # The rendezvous build context is the repo root; keep the daemon upload tiny.
 
 target

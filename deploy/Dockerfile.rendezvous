@@ -1,4 +1,4 @@
-# my-croc-rendezvous server image.
+# worddrop-rendezvous server image.
 #
 # Multi-stage build of the workspace's rendezvous crate only (no path deps on
 # other workspace crates). Build context MUST be the repo root
@@ -30,7 +30,7 @@ ARG CARGO_REGISTRY=""
 RUN if [ -n "$CARGO_REGISTRY" ]; then \
       printf '[source.crates-io]\nreplace-with = "mirror"\n[source.mirror]\nregistry = "%s"\n' "$CARGO_REGISTRY" > /usr/local/cargo/config.toml; \
     fi \
-    && cargo build --release -p my-croc-rendezvous -j 2
+    && cargo build --release -p worddrop-rendezvous -j 2
 
 FROM debian:bookworm-slim AS runtime
 
@@ -42,7 +42,7 @@ RUN if [ -n "$APT_MIRROR" ]; then \
     && apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /src/target/release/my-croc-rendezvous /usr/local/bin/my-croc-rendezvous
+COPY --from=builder /src/target/release/worddrop-rendezvous /usr/local/bin/worddrop-rendezvous
 
 # Hardening: run as a non-root user. The service is stateless (in-memory
 # mailbox — verified: the crate performs no filesystem writes at runtime),
@@ -52,8 +52,8 @@ USER rendezvous
 
 # Must bind 0.0.0.0 inside the container (the binary default is 127.0.0.1:8080,
 # which would be unreachable from outside the container). compose sets this.
-ENV MY_CROC_RENDEZVOUS_ADDR=0.0.0.0:8080
+ENV WORDDROP_RENDEZVOUS_ADDR=0.0.0.0:8080
 
 EXPOSE 8080
 
-ENTRYPOINT ["my-croc-rendezvous"]
+ENTRYPOINT ["worddrop-rendezvous"]

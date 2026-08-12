@@ -19,10 +19,10 @@ import 'package:app/widgets/status_banner.dart';
 typedef FilePickFn = Future<List<String>?> Function();
 
 /// Default picker: the file_picker plugin's multi-file dialog. In demo mode
-/// (MY_CROC_DEMO_MODE, headless manual QA without the XDG portal) a fixed
+/// (WORDDROP_DEMO_MODE, headless manual QA without the XDG portal) a fixed
 /// fixture path stands in for the dialog.
 Future<List<String>?> defaultPickFiles() async {
-  if (Platform.environment['MY_CROC_DEMO_MODE'] == 'true') {
+  if (Platform.environment['WORDDROP_DEMO_MODE'] == 'true') {
     const demoFile = '/tmp/opencode/qa/sendme.txt';
     return [demoFile];
   }

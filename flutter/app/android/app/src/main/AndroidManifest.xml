@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- T20: my-croc transfers over the network (rendezvous + relay + direct QUIC).
+    <!-- T20: worddrop transfers over the network (rendezvous + relay + direct QUIC).
          Debug/profile manifests inherit this; main manifest needs it explicitly
          for release builds. -->
     <uses-permission android:name="android.permission.INTERNET"/>

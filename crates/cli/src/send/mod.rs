@@ -16,12 +16,12 @@ use tokio::sync::mpsc;
 
 use iroh::endpoint::Connection;
 
-use my_croc_core::pairing::wordcode::{WordCode, WordCodeError};
-use my_croc_core::session::Session;
-use my_croc_core::session::control::{ControlMessage, FileMeta, SessionError, send_message};
-use my_croc_core::session::state::{Transition, TransitionError};
-use my_croc_core::transfer::engine::TransferEngine;
-use my_croc_core::transfer::send::ProgressEvent;
+use worddrop_core::pairing::wordcode::{WordCode, WordCodeError};
+use worddrop_core::session::Session;
+use worddrop_core::session::control::{ControlMessage, FileMeta, SessionError, send_message};
+use worddrop_core::session::state::{Transition, TransitionError};
+use worddrop_core::transfer::engine::TransferEngine;
+use worddrop_core::transfer::send::ProgressEvent;
 
 use crate::rendezvous_client::{RvClient, RvError};
 use crate::ui::SendUi;
@@ -44,7 +44,7 @@ pub enum SendOutcome {
 #[derive(Debug)]
 pub enum SendError {
     /// Preparing the transfer failed (missing paths, import errors, ...).
-    Prepare(my_croc_core::transfer::send::SendError),
+    Prepare(worddrop_core::transfer::send::SendError),
     /// Rendezvous allocate failed.
     Rv(RvError),
     /// Word-code generation failed.
@@ -129,8 +129,8 @@ impl std::error::Error for SendError {
     }
 }
 
-impl From<my_croc_core::transfer::send::SendError> for SendError {
-    fn from(err: my_croc_core::transfer::send::SendError) -> Self {
+impl From<worddrop_core::transfer::send::SendError> for SendError {
+    fn from(err: worddrop_core::transfer::send::SendError) -> Self {
         Self::Prepare(err)
     }
 }

@@ -1,7 +1,7 @@
 /// This is copied from Cargokit (which is the official way to use it currently)
 /// Details: https://fzyzcjy.github.io/flutter_rust_bridge/manual/integrate/builtin
 ///
-/// T20 (my-croc): Gradle 9 removed Project.exec(Closure) - the original
+/// T20 (worddrop): Gradle 9 removed Project.exec(Closure) - the original
 /// `project.exec { ... }` calls fail with "Could not find method exec()".
 /// Rewritten to the exec(Action) overload (drop-in, same ExecSpec config).
 
@@ -63,7 +63,7 @@ abstract class CargoKitBuildTask extends DefaultTask {
 
         def rootProjectDir = project.rootProject.projectDir
 
-        // T20 (my-croc): Gradle 9 removed Project.exec(Closure) and closure->Action
+        // T20 (worddrop): Gradle 9 removed Project.exec(Closure) and closure->Action
         // coercion no longer works in its Groovy, so Project.exec is unusable here.
         // ProcessBuilder is pure-Java and version-proof.
         if (!Os.isFamily(Os.FAMILY_WINDOWS)) {

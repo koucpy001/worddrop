@@ -13,18 +13,18 @@ use iroh::endpoint::Connection;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{broadcast, mpsc};
 
-use my_croc_core::pairing::wordcode::WordCode;
-use my_croc_core::session::control::{
+use worddrop_core::pairing::wordcode::WordCode;
+use worddrop_core::session::control::{
     ControlMessage, HANDSHAKE_TIMEOUT, PROTOCOL_VERSION, recv_message_timeout, send_message,
 };
-use my_croc_core::session::state::Transition;
-use my_croc_core::session::Session;
-use my_croc_core::transfer::engine::TransferEngine;
-use my_croc_core::transfer::receive::{ReceiveOptions, ReceiveProgress, TransferResult};
-use my_croc_core::transfer::send::{PreparedTransfer, ProgressEvent};
+use worddrop_core::session::state::Transition;
+use worddrop_core::session::Session;
+use worddrop_core::transfer::engine::TransferEngine;
+use worddrop_core::transfer::receive::{ReceiveOptions, ReceiveProgress, TransferResult};
+use worddrop_core::transfer::send::{PreparedTransfer, ProgressEvent};
 
-use my_croc_cli::rendezvous_client::RvClient;
-use my_croc_cli::wire::{self, CONTROL_ALPN, PAIR_TIMEOUT};
+use worddrop_cli::rendezvous_client::RvClient;
+use worddrop_cli::wire::{self, CONTROL_ALPN, PAIR_TIMEOUT};
 
 use super::session::{Stage, SessionCommand, cancel_flow, emit, finish_failed, reject_other};
 use crate::api::events::BridgeEvent;
@@ -135,7 +135,7 @@ pub(super) async fn run_sender_flow(
         files: prepared
             .files
             .iter()
-            .map(|file| my_croc_core::session::control::FileMeta {
+            .map(|file| worddrop_core::session::control::FileMeta {
                 name: file.name.clone(),
                 size: file.size,
                 hash: file.hash.to_hex(),

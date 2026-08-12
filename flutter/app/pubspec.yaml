@@ -1,5 +1,5 @@
 name: app
-description: "my-croc Flutter GUI (WAN file transfer by word code)."
+description: "WordDrop Flutter GUI (WAN file transfer by word code)."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -35,9 +35,9 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   # flutter_rust_bridge v2 (drift_bridge pattern): generated bindings live in
-  # lib/src/rust, native lib is built by the my_croc_bridge cargokit plugin.
+  # lib/src/rust, native lib is built by the worddrop_bridge cargokit plugin.
   flutter_rust_bridge: 2.12.0
-  my_croc_bridge:
+  worddrop_bridge:
     path: ../rust_builder
   file_picker: ^11.0.3
   shared_preferences: ^2.5.0

@@ -1,4 +1,4 @@
-//! Integration tests for `my_croc_core::identity` — persistent SecretKey,
+//! Integration tests for `worddrop_core::identity` — persistent SecretKey,
 //! NodeId derivation, and config dir resolution (T4 acceptance).
 
 use std::{
@@ -11,7 +11,7 @@ use std::{
 };
 
 use iroh::SecretKey;
-use my_croc_core::identity::{
+use worddrop_core::identity::{
     Config, DEFAULT_RELAY_URL, DEFAULT_RENDEZVOUS_URL, ENV_CONFIG_DIR, ENV_DATA_DIR, ENV_RELAY_URL,
     ENV_RENDEZVOUS_URL, Error, Identity,
 };
@@ -27,7 +27,7 @@ static ENV_LOCK: Mutex<()> = Mutex::new(());
 fn temp_dir(tag: &str) -> PathBuf {
     let n = DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!(
-        "my-croc-identity-test-{tag}-{}-{n}",
+        "worddrop-identity-test-{tag}-{}-{n}",
         std::process::id()
     ));
     let _ = fs::remove_dir_all(&dir);
@@ -146,7 +146,7 @@ fn identity_config_defaults_are_correct() {
 }
 
 #[test]
-fn identity_my_croc_config_dir_env_override_works() {
+fn identity_worddrop_config_dir_env_override_works() {
     let _guard = ENV_LOCK.lock().expect("env lock");
     let dir = temp_dir("env-config-dir");
     let original = std::env::var(ENV_CONFIG_DIR).ok();

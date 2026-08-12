@@ -1,4 +1,4 @@
-//! Session handle for a my-croc transfer (T5).
+//! Session handle for a worddrop transfer (T5).
 //!
 //! A [`Session`] owns the phase state machine ([`state`]) and a cancellation
 //! watch channel (drift `send/session.rs` pattern). Every await in the
@@ -16,7 +16,7 @@ use tokio::sync::{Mutex, watch};
 
 use state::{SessionPhase, Transition, TransitionError};
 
-/// Handle for a my-croc session: phase state machine + cancellation watch.
+/// Handle for a worddrop session: phase state machine + cancellation watch.
 #[derive(Debug, Clone)]
 pub struct Session {
     inner: Arc<SessionInner>,

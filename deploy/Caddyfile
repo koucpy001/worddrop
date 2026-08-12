@@ -1,16 +1,16 @@
-# Caddyfile — my-croc (WordDrop) production TLS termination.
+# Caddyfile — worddrop (WordDrop) production TLS termination.
 #
 # Caddy is the SOLE host owner of 80/443 TCP and the sole cert issuer for
 # both worddrop.cloud domains. It obtains public Let's Encrypt certs via
 # HTTP-01 on :80 (which Caddy owns) and persists them in the caddy-data
 # volume (./docker-compose.yml: caddy-data:/data).
 #
-# Upstream names are the COMPOSE SERVICE names (my-croc-rendezvous,
+# Upstream names are the COMPOSE SERVICE names (worddrop-rendezvous,
 # iroh-relay), resolved on the compose network — not hostnames.
 
 # Pairing mailbox (rendezvous): https://pair.worddrop.cloud
 pair.worddrop.cloud {
-	reverse_proxy my-croc-rendezvous:8080
+	reverse_proxy worddrop-rendezvous:8080
 }
 
 # Transfer relay: https://relay.worddrop.cloud — plain-HTTP upstream :80

@@ -2502,78 +2502,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "my-croc-cli"
-version = "0.2.0"
-dependencies = [
- "clap",
- "indicatif",
- "iroh",
- "iroh-blobs",
- "my-croc-core",
- "rand 0.9.5",
- "rustls",
- "serde",
- "serde_json",
- "tokio",
- "tokio-rustls",
- "toml",
- "tracing",
- "tracing-subscriber",
- "url",
- "webpki-roots",
-]
-
-[[package]]
-name = "my-croc-core"
-version = "0.2.0"
-dependencies = [
- "dirs",
- "hkdf",
- "iroh",
- "iroh-blobs",
- "n0-future",
- "rand 0.9.5",
- "rustls",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "spake2",
- "tokio",
- "tracing",
- "zeroize",
-]
-
-[[package]]
-name = "my-croc-rendezvous"
-version = "0.2.0"
-dependencies = [
- "axum",
- "rand 0.9.5",
- "serde",
- "serde_json",
- "tokio",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "my_croc_bridge"
-version = "0.1.0"
-dependencies = [
- "flutter_rust_bridge",
- "iroh",
- "iroh-blobs",
- "my-croc-cli",
- "my-croc-core",
- "my-croc-rendezvous",
- "rand 0.9.5",
- "serde",
- "tokio",
-]
-
-[[package]]
 name = "n0-error"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5176,6 +5104,78 @@ dependencies = [
  "thiserror 2.0.20",
  "windows",
  "windows-core",
+]
+
+[[package]]
+name = "worddrop-cli"
+version = "0.2.0"
+dependencies = [
+ "clap",
+ "indicatif",
+ "iroh",
+ "iroh-blobs",
+ "rand 0.9.5",
+ "rustls",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-rustls",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "webpki-roots",
+ "worddrop-core",
+]
+
+[[package]]
+name = "worddrop-core"
+version = "0.2.0"
+dependencies = [
+ "dirs",
+ "hkdf",
+ "iroh",
+ "iroh-blobs",
+ "n0-future",
+ "rand 0.9.5",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "spake2",
+ "tokio",
+ "tracing",
+ "zeroize",
+]
+
+[[package]]
+name = "worddrop-rendezvous"
+version = "0.2.0"
+dependencies = [
+ "axum",
+ "rand 0.9.5",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "worddrop_bridge"
+version = "0.1.0"
+dependencies = [
+ "flutter_rust_bridge",
+ "iroh",
+ "iroh-blobs",
+ "rand 0.9.5",
+ "serde",
+ "tokio",
+ "worddrop-cli",
+ "worddrop-core",
+ "worddrop-rendezvous",
 ]
 
 [[package]]

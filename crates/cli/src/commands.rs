@@ -11,8 +11,8 @@ use tokio::time::timeout;
 
 use iroh::{RelayMode, RelayUrl};
 
-use my_croc_core::identity::Identity;
-use my_croc_core::transfer::engine::{EngineSpec, TransferEngine};
+use worddrop_core::identity::Identity;
+use worddrop_core::transfer::engine::{EngineSpec, TransferEngine};
 
 use crate::{
     cli::{Cli, Commands, ConfigArgs, ConfigCommands, ReceiveArgs, SendArgs},
@@ -61,7 +61,7 @@ fn role_data_dir(base: &Path, role: Role) -> PathBuf {
     base.join(role.dir_name())
 }
 
-/// `my-croc send <paths...>`: prepare, allocate a nameplate, pair with
+/// `worddrop send <paths...>`: prepare, allocate a nameplate, pair with
 /// SPAKE2 (words only), transfer with a progress bar, cancel on Ctrl+C.
 fn send(args: SendArgs) -> Result<String, CliError> {
     let runtime = tokio::runtime::Runtime::new().map_err(|source| {
@@ -74,7 +74,7 @@ fn send(args: SendArgs) -> Result<String, CliError> {
 
 async fn send_async(args: SendArgs) -> Result<String, CliError> {
     let config = Config::load()?;
-    let config_dir = my_croc_core::identity::Config::config_dir()?;
+    let config_dir = worddrop_core::identity::Config::config_dir()?;
     let identity = Identity::load_or_create(&config_dir)?;
 
     // The sender must accept pairing control streams on its own ALPN: the
@@ -155,7 +155,7 @@ async fn send_async(args: SendArgs) -> Result<String, CliError> {
     Ok(summary)
 }
 
-/// `my-croc receive [--code CODE] [--output DIR]`: split the typed code into
+/// `worddrop receive [--code CODE] [--output DIR]`: split the typed code into
 /// nameplate + words (F1: words never leave the client), claim the NAME-plate
 /// only via rendezvous, on pending → dial sender via ticket, SPAKE2 with the
 /// WORDS as password, receive Offer → prompt accept/decline (interactive,

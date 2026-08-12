@@ -3,12 +3,12 @@
 
 use std::{fs, path::PathBuf};
 
-use my_croc_core::identity;
+use worddrop_core::identity;
 
 use super::{Config, ConfigError, ConfigFile, ENV_LOCK};
 
 fn temp_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("my-croc-cli-test-{name}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("worddrop-cli-test-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).expect("create temp dir");
     dir
@@ -18,7 +18,7 @@ fn full_file() -> ConfigFile {
     ConfigFile {
         rendezvous_url: Some("http://rv.example:8080".to_string()),
         relay_url: Some("http://relay.example:3340".to_string()),
-        data_dir: Some(PathBuf::from("/tmp/my-croc-data")),
+        data_dir: Some(PathBuf::from("/tmp/worddrop-data")),
         overwrite: Some(true),
     }
 }
@@ -99,7 +99,7 @@ fn config_resolve_file_over_default() {
     let cfg = Config::resolve(&full_file()).expect("resolve");
     assert_eq!(cfg.rendezvous_url, "http://rv.example:8080");
     assert_eq!(cfg.relay_url, "http://relay.example:3340");
-    assert_eq!(cfg.data_dir, PathBuf::from("/tmp/my-croc-data"));
+    assert_eq!(cfg.data_dir, PathBuf::from("/tmp/worddrop-data"));
     assert!(cfg.overwrite);
 }
 

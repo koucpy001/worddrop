@@ -1,4 +1,4 @@
-//! my-croc-rendezvous — axum nameplate mailbox server.
+//! worddrop-rendezvous — axum nameplate mailbox server.
 //!
 //! Code <-> ticket mailbox: allocate a numeric nameplate (1-9999), one-shot
 //! claim, 600s TTL, per-IP rate limits. The server stores and routes ONLY by
@@ -101,31 +101,31 @@ async fn metrics(State(state): State<SharedState>) -> Response {
     };
     let body = [
         (
-            "my_croc_rendezvous_allocate_total",
+            "worddrop_rendezvous_allocate_total",
             "Total nameplate allocation requests received.",
             "counter",
             state.allocate_total.load(Ordering::Relaxed),
         ),
         (
-            "my_croc_rendezvous_claim_total",
+            "worddrop_rendezvous_claim_total",
             "Total successful one-shot claims.",
             "counter",
             state.claim_total.load(Ordering::Relaxed),
         ),
         (
-            "my_croc_rendezvous_rate_limited_total",
+            "worddrop_rendezvous_rate_limited_total",
             "Total requests rejected by rate limiting.",
             "counter",
             state.rate_limited_total.load(Ordering::Relaxed),
         ),
         (
-            "my_croc_rendezvous_requests_total",
+            "worddrop_rendezvous_requests_total",
             "Total HTTP requests served.",
             "counter",
             state.requests_total.load(Ordering::Relaxed),
         ),
         (
-            "my_croc_rendezvous_pairs_active",
+            "worddrop_rendezvous_pairs_active",
             "Number of pairs currently tracked in the mailbox.",
             "gauge",
             pairs_active,
@@ -413,7 +413,7 @@ mod tests {
         let text = String::from_utf8(bytes.to_vec())
             .expect("utf-8")
             .replace("\r\n", "\n");
-        assert!(text.contains("my_croc_rendezvous_pairs_active 0"));
+        assert!(text.contains("worddrop_rendezvous_pairs_active 0"));
     }
 
     /// The healthy path keeps the literal "ok" body (Caddy/CI probes).

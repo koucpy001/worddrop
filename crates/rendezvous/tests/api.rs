@@ -1,4 +1,4 @@
-//! Integration tests for the my-croc rendezvous mailbox server.
+//! Integration tests for the worddrop rendezvous mailbox server.
 //!
 //! TDD via `tower::ServiceExt::oneshot`: the axum `Router` is exercised as a
 //! `Service<Request>` without binding a socket. Client IP is injected through
@@ -12,7 +12,7 @@ use std::time::Duration;
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Method, Request, StatusCode, header};
-use my_croc_rendezvous::{ACCESS_LIMIT_PER_MINUTE, AppState, CREATE_LIMIT_PER_MINUTE, app};
+use worddrop_rendezvous::{ACCESS_LIMIT_PER_MINUTE, AppState, CREATE_LIMIT_PER_MINUTE, app};
 use serde::Deserialize;
 use serde_json::Value;
 use tower::ServiceExt;
@@ -410,7 +410,7 @@ async fn health_returns_ok() {
     assert_eq!(bytes.as_ref(), b"ok");
 }
 
-/// Parse `my_croc_rendezvous_<name> <value>` out of a Prometheus text body.
+/// Parse `worddrop_rendezvous_<name> <value>` out of a Prometheus text body.
 fn metric_value(body: &str, name: &str) -> u64 {
     body.lines()
         .find_map(|line| {
@@ -439,18 +439,18 @@ async fn metrics_contains_help_type_and_zero_values() {
     let text = body.replace("\r\n", "\n");
 
     for name in [
-        "my_croc_rendezvous_allocate_total",
-        "my_croc_rendezvous_claim_total",
-        "my_croc_rendezvous_rate_limited_total",
-        "my_croc_rendezvous_requests_total",
-        "my_croc_rendezvous_pairs_active",
+        "worddrop_rendezvous_allocate_total",
+        "worddrop_rendezvous_claim_total",
+        "worddrop_rendezvous_rate_limited_total",
+        "worddrop_rendezvous_requests_total",
+        "worddrop_rendezvous_pairs_active",
     ] {
         assert!(
             text.contains(&format!("# HELP {name} ")),
             "missing HELP line for {name}"
         );
         let type_line = if name.ends_with("pairs_active") {
-            "# TYPE my_croc_rendezvous_pairs_active gauge"
+            "# TYPE worddrop_rendezvous_pairs_active gauge"
         } else {
             &format!("# TYPE {name} counter")
         };
@@ -462,15 +462,15 @@ async fn metrics_contains_help_type_and_zero_values() {
     }
 
     // All counters start at zero on a fresh state.
-    assert_eq!(metric_value(&text, "my_croc_rendezvous_allocate_total"), 0);
-    assert_eq!(metric_value(&text, "my_croc_rendezvous_claim_total"), 0);
+    assert_eq!(metric_value(&text, "worddrop_rendezvous_allocate_total"), 0);
+    assert_eq!(metric_value(&text, "worddrop_rendezvous_claim_total"), 0);
     assert_eq!(
-        metric_value(&text, "my_croc_rendezvous_rate_limited_total"),
+        metric_value(&text, "worddrop_rendezvous_rate_limited_total"),
         0
     );
-    assert_eq!(metric_value(&text, "my_croc_rendezvous_pairs_active"), 0);
+    assert_eq!(metric_value(&text, "worddrop_rendezvous_pairs_active"), 0);
     // requests_total includes this /metrics request itself.
-    assert_eq!(metric_value(&text, "my_croc_rendezvous_requests_total"), 1);
+    assert_eq!(metric_value(&text, "worddrop_rendezvous_requests_total"), 1);
 }
 
 /// Counters increment on the allocate and claim paths; pairs_active tracks the
@@ -503,9 +503,9 @@ async fn metrics_reflect_allocate_claim_and_pairs_active() {
     let text = String::from_utf8(bytes.to_vec())
         .expect("utf-8")
         .replace("\r\n", "\n");
-    assert_eq!(metric_value(&text, "my_croc_rendezvous_allocate_total"), 1);
-    assert_eq!(metric_value(&text, "my_croc_rendezvous_claim_total"), 0);
-    assert_eq!(metric_value(&text, "my_croc_rendezvous_pairs_active"), 1);
+    assert_eq!(metric_value(&text, "worddrop_rendezvous_allocate_total"), 1);
+    assert_eq!(metric_value(&text, "worddrop_rendezvous_claim_total"), 0);
+    assert_eq!(metric_value(&text, "worddrop_rendezvous_pairs_active"), 1);
 
     let claim_uri = format!("/v1/pairs/{}/claim", created.nameplate);
     let claim = app
@@ -526,12 +526,12 @@ async fn metrics_reflect_allocate_claim_and_pairs_active() {
     let text = String::from_utf8(bytes.to_vec())
         .expect("utf-8")
         .replace("\r\n", "\n");
-    assert_eq!(metric_value(&text, "my_croc_rendezvous_allocate_total"), 1);
-    assert_eq!(metric_value(&text, "my_croc_rendezvous_claim_total"), 1);
+    assert_eq!(metric_value(&text, "worddrop_rendezvous_allocate_total"), 1);
+    assert_eq!(metric_value(&text, "worddrop_rendezvous_claim_total"), 1);
     // The pair was claimed but is still tracked until TTL expiry/purge.
-    assert_eq!(metric_value(&text, "my_croc_rendezvous_pairs_active"), 1);
+    assert_eq!(metric_value(&text, "worddrop_rendezvous_pairs_active"), 1);
     // 2 API calls + 2 metrics fetches (each fetch counts itself).
-    assert_eq!(metric_value(&text, "my_croc_rendezvous_requests_total"), 4);
+    assert_eq!(metric_value(&text, "worddrop_rendezvous_requests_total"), 4);
 }
 
 /// Rate-limited requests bump rate_limited_total (and still count as requests).
@@ -576,10 +576,10 @@ async fn rate_limited_requests_increment_rate_limited_counter() {
         .expect("utf-8")
         .replace("\r\n", "\n");
     assert_eq!(
-        metric_value(&text, "my_croc_rendezvous_rate_limited_total"),
+        metric_value(&text, "worddrop_rendezvous_rate_limited_total"),
         1
     );
-    assert_eq!(metric_value(&text, "my_croc_rendezvous_allocate_total"), 11);
+    assert_eq!(metric_value(&text, "worddrop_rendezvous_allocate_total"), 11);
     // 11 creates + 1 metrics fetch.
-    assert_eq!(metric_value(&text, "my_croc_rendezvous_requests_total"), 12);
+    assert_eq!(metric_value(&text, "worddrop_rendezvous_requests_total"), 12);
 }

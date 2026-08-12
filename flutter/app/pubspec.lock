@@ -208,13 +208,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.18.0"
-  my_croc_bridge:
-    dependency: "direct main"
-    description:
-      path: "../rust_builder"
-      relative: true
-    source: path
-    version: "0.0.1"
   path:
     dependency: transitive
     description:
@@ -412,6 +405,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.15.0"
+  worddrop_bridge:
+    dependency: "direct main"
+    description:
+      path: "../rust_builder"
+      relative: true
+    source: path
+    version: "0.0.1"
   xdg_directories:
     dependency: transitive
     description:

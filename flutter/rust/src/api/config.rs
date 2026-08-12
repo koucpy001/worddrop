@@ -1,5 +1,5 @@
-//! Config get/set for the GUI: mirror of the CLI's `my-croc config` command,
-//! reusing `my_croc_cli::config` (env > file > default precedence).
+//! Config get/set for the GUI: mirror of the CLI's `worddrop config` command,
+//! reusing `worddrop_cli::config` (env > file > default precedence).
 
 // Android-only use on the host lib target (cfg-gated functions below).
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
@@ -7,12 +7,12 @@ use std::path::PathBuf;
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
 use std::sync::Once;
 
-use my_croc_cli::config::{Config, ConfigFile};
+use worddrop_cli::config::{Config, ConfigFile};
 #[cfg_attr(not(target_os = "android"), allow(unused_imports))]
-use my_croc_core::identity;
+use worddrop_core::identity;
 
-/// Android app-scoped external files dir, e.g. for `com.mycroc.app`:
-/// `/storage/emulated/0/Android/data/com.mycroc.app/files`.
+/// Android app-scoped external files dir, e.g. for `com.worddrop.app`:
+/// `/storage/emulated/0/Android/data/com.worddrop.app/files`.
 ///
 /// This is the Rust-side equivalent of `Context.getExternalFilesDir(null)`
 /// (scoped storage, writable without any runtime permission). It is used as
@@ -23,7 +23,7 @@ use my_croc_core::identity;
 #[cfg(target_os = "android")]
 fn android_app_files_dir() -> Option<PathBuf> {
     // The first NUL-terminated token of /proc/self/cmdline is the process
-    // name == applicationId (e.g. `com.mycroc.app`).
+    // name == applicationId (e.g. `com.worddrop.app`).
     let pkg = std::fs::read_to_string("/proc/self/cmdline")
         .ok()?
         .split('\0')
@@ -38,7 +38,7 @@ fn android_app_files_dir() -> Option<PathBuf> {
 
 /// Make the config dir resolvable on Android: the platform default
 /// (`dirs::config_dir()`) is `None` in the app sandbox, so we point
-/// `MY_CROC_CONFIG_DIR` at the app-scoped external files dir unless the user
+/// `WORDDROP_CONFIG_DIR` at the app-scoped external files dir unless the user
 /// already set it. No-op on other platforms. Call before any config load.
 pub fn ensure_android_config_dir() {
     #[cfg(target_os = "android")]
@@ -92,7 +92,7 @@ pub fn set_config(key: String, value: String) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use my_croc_core::identity;
+    use worddrop_core::identity;
 
     use super::*;
     use crate::api::ENV_LOCK;
@@ -108,8 +108,8 @@ mod tests {
     #[test]
     fn android_app_files_dir_shape_matches_get_external_files_dir() {
         assert_eq!(
-            app_files_dir("/storage/emulated/0", "com.mycroc.app"),
-            PathBuf::from("/storage/emulated/0/Android/data/com.mycroc.app/files")
+            app_files_dir("/storage/emulated/0", "com.worddrop.app"),
+            PathBuf::from("/storage/emulated/0/Android/data/com.worddrop.app/files")
         );
     }
 
@@ -133,7 +133,7 @@ mod tests {
     fn with_temp_config<T>(f: impl FnOnce() -> T) -> T {
         let _guard = ENV_LOCK.lock().unwrap();
         let dir =
-            std::env::temp_dir().join(format!("my-croc-bridge-config-test-{}", std::process::id()));
+            std::env::temp_dir().join(format!("worddrop-bridge-config-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         // SAFETY: serialized by ENV_LOCK; restored on drop.
@@ -153,13 +153,13 @@ mod tests {
         with_temp_config(|| {
             set_config("rendezvous_url".into(), "http://127.0.0.1:18081".into()).unwrap();
             set_config("relay_url".into(), "disabled".into()).unwrap();
-            set_config("data_dir".into(), "/tmp/my-croc-gui".into()).unwrap();
+            set_config("data_dir".into(), "/tmp/worddrop-gui".into()).unwrap();
             set_config("overwrite".into(), "true".into()).unwrap();
 
             let cfg = get_config().unwrap();
             assert_eq!(cfg.rendezvous_url, "http://127.0.0.1:18081");
             assert_eq!(cfg.relay_url, "disabled");
-            assert_eq!(cfg.data_dir, "/tmp/my-croc-gui");
+            assert_eq!(cfg.data_dir, "/tmp/worddrop-gui");
             assert!(cfg.overwrite);
         });
     }

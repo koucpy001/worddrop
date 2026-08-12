@@ -3,9 +3,9 @@
 
 use std::{error::Error, fs, path::PathBuf};
 
-use my_croc_core::identity;
-use my_croc_core::pairing::spake::SpakeError;
-use my_croc_core::pairing::wordcode::WordCode;
+use worddrop_core::identity;
+use worddrop_core::pairing::spake::SpakeError;
+use worddrop_core::pairing::wordcode::WordCode;
 
 use crate::{
     cli::{Cli, Commands, ConfigArgs, ConfigCommands, GetArgs, SetArgs},
@@ -16,13 +16,13 @@ use crate::{
 };
 
 fn temp_config_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("my-croc-cli-{name}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("worddrop-cli-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).expect("create temp dir");
     dir
 }
 
-/// Run `f` with `MY_CROC_CONFIG_DIR` pointed at `dir`.
+/// Run `f` with `WORDDROP_CONFIG_DIR` pointed at `dir`.
 ///
 /// SAFETY: `set_var`/`remove_var` are unsafe in edition 2024; the crate-wide
 /// `ENV_LOCK` keeps env access race-free.
@@ -211,7 +211,7 @@ fn role_data_dirs_are_private_per_role() {
     // (blobs.db is exclusive to one process — the receiver hung right after
     // "creating or opening meta database" while the sender held the file
     // lock). Each role must own a private subdir of the configured base.
-    let base = std::env::temp_dir().join("my-croc-role-base");
+    let base = std::env::temp_dir().join("worddrop-role-base");
     let send = commands::role_data_dir(&base, commands::Role::Send);
     let recv = commands::role_data_dir(&base, commands::Role::Receive);
     assert_eq!(send, base.join("send"));

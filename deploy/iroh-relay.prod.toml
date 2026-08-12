@@ -33,6 +33,6 @@ http_bind_addr = "0.0.0.0:80"
 
 # --- Access control (optional) -------------------------------------------
 # Restrict relaying to a bearer token shared by your clients:
-#   iroh clients would send `Authorization: Bearer <token>` — my-croc does
+#   iroh clients would send `Authorization: Bearer <token>` — worddrop does
 #   not set this header, so enabling this REQUIRES a patched client.
 # access.shared_token = ["change-me"]

@@ -1,4 +1,4 @@
-//! clap command surface (T12): `my-croc send|receive|config`, global `-v`.
+//! clap command surface (T12): `worddrop send|receive|config`, global `-v`.
 
 use std::path::PathBuf;
 
@@ -7,7 +7,7 @@ use clap::{Parser, Subcommand};
 #[cfg(test)]
 mod tests;
 
-/// my-croc — secure cross-platform file transfer with word-code pairing.
+/// worddrop — secure cross-platform file transfer with word-code pairing.
 ///
 /// Pair with a short code phrase (`nameplate-word-word-word`), then transfer
 /// files end-to-end encrypted. The rendezvous server only ever sees the

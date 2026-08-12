@@ -33,18 +33,18 @@ pub const KEY_FILE: &str = "key.bin";
 
 /// Overrides the config dir (required on Android, where the app data dir is
 /// chosen by the OS).
-pub const ENV_CONFIG_DIR: &str = "MY_CROC_CONFIG_DIR";
+pub const ENV_CONFIG_DIR: &str = "WORDDROP_CONFIG_DIR";
 /// Overrides the data dir (blobs, transfer records).
-pub const ENV_DATA_DIR: &str = "MY_CROC_DATA_DIR";
+pub const ENV_DATA_DIR: &str = "WORDDROP_DATA_DIR";
 /// Overrides the rendezvous URL.
-pub const ENV_RENDEZVOUS_URL: &str = "MY_CROC_RENDEZVOUS_URL";
+pub const ENV_RENDEZVOUS_URL: &str = "WORDDROP_RENDEZVOUS_URL";
 /// Overrides the relay URL.
-pub const ENV_RELAY_URL: &str = "MY_CROC_RELAY_URL";
+pub const ENV_RELAY_URL: &str = "WORDDROP_RELAY_URL";
 
 /// Errors from identity loading and config resolution.
 #[derive(Debug)]
 pub enum Error {
-    /// No platform config dir could be resolved and no `MY_CROC_CONFIG_DIR`
+    /// No platform config dir could be resolved and no `WORDDROP_CONFIG_DIR`
     /// override is set.
     ConfigDirNotFound,
     /// Failed to read the persisted key file.
@@ -100,10 +100,10 @@ pub struct Config {
 }
 
 impl Config {
-    /// The my-croc config dir: `MY_CROC_CONFIG_DIR` override, else the
+    /// The worddrop config dir: `WORDDROP_CONFIG_DIR` override, else the
     /// platform config dir (Linux `$XDG_CONFIG_HOME` / `~/.config`, Windows
     /// `%APPDATA%`, macOS `~/Library/Application Support`) joined with
-    /// `my-croc`.
+    /// `worddrop`.
     pub fn config_dir() -> Result<PathBuf, Error> {
         if let Some(dir) = std::env::var(ENV_CONFIG_DIR)
             .ok()
@@ -112,7 +112,7 @@ impl Config {
             return Ok(PathBuf::from(dir));
         }
         dirs::config_dir()
-            .map(|dir| dir.join("my-croc"))
+            .map(|dir| dir.join("worddrop"))
             .ok_or(Error::ConfigDirNotFound)
     }
 
@@ -120,7 +120,7 @@ impl Config {
     ///
     /// The data dir defaults to the config dir (identity key, blobs, and
     /// transfer records all live under one tree, per the plan's T4 decision);
-    /// `MY_CROC_DATA_DIR` moves the data tree elsewhere.
+    /// `WORDDROP_DATA_DIR` moves the data tree elsewhere.
     pub fn load() -> Result<Config, Error> {
         let data_dir = match std::env::var(ENV_DATA_DIR) {
             Ok(dir) if !dir.is_empty() => PathBuf::from(dir),
