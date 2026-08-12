@@ -1,7 +1,61 @@
 //! Config get/set for the GUI: mirror of the CLI's `my-croc config` command,
 //! reusing `my_croc_cli::config` (env > file > default precedence).
 
+// Android-only use on the host lib target (cfg-gated functions below).
+#[cfg_attr(not(target_os = "android"), allow(unused_imports))]
+use std::path::PathBuf;
+#[cfg_attr(not(target_os = "android"), allow(unused_imports))]
+use std::sync::Once;
+
 use my_croc_cli::config::{Config, ConfigFile};
+#[cfg_attr(not(target_os = "android"), allow(unused_imports))]
+use my_croc_core::identity;
+
+/// Android app-scoped external files dir, e.g. for `com.mycroc.app`:
+/// `/storage/emulated/0/Android/data/com.mycroc.app/files`.
+///
+/// This is the Rust-side equivalent of `Context.getExternalFilesDir(null)`
+/// (scoped storage, writable without any runtime permission). It is used as
+/// the Android config/data dir because `dirs::config_dir()` returns `None`
+/// in the Android app sandbox (no `HOME`/`XDG_CONFIG_HOME`), which would
+/// otherwise fail every config-dependent call with "no platform config dir
+/// found" (real-device finding, T8).
+#[cfg(target_os = "android")]
+fn android_app_files_dir() -> Option<PathBuf> {
+    // The first NUL-terminated token of /proc/self/cmdline is the process
+    // name == applicationId (e.g. `com.mycroc.app`).
+    let pkg = std::fs::read_to_string("/proc/self/cmdline")
+        .ok()?
+        .split('\0')
+        .next()
+        .filter(|s| !s.is_empty())?
+        .to_string();
+    let external = std::env::var_os("EXTERNAL_STORAGE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/storage/emulated/0"));
+    Some(external.join("Android/data").join(pkg).join("files"))
+}
+
+/// Make the config dir resolvable on Android: the platform default
+/// (`dirs::config_dir()`) is `None` in the app sandbox, so we point
+/// `MY_CROC_CONFIG_DIR` at the app-scoped external files dir unless the user
+/// already set it. No-op on other platforms. Call before any config load.
+pub fn ensure_android_config_dir() {
+    #[cfg(target_os = "android")]
+    {
+        static ONCE: Once = Once::new();
+        ONCE.call_once(|| {
+            if std::env::var_os(identity::ENV_CONFIG_DIR).is_some() {
+                return; // explicit user override wins
+            }
+            if let Some(dir) = android_app_files_dir() {
+                // SAFETY: runs once at bridge startup before any other
+                // thread reads the environment; mirrors the test helpers.
+                unsafe { std::env::set_var(identity::ENV_CONFIG_DIR, &dir) };
+            }
+        });
+    }
+}
 
 /// The effective runtime config (env > file > built-in default).
 #[derive(Debug, Clone)]
@@ -14,6 +68,7 @@ pub struct ConfigDto {
 
 /// Read the effective config.
 pub fn get_config() -> Result<ConfigDto, String> {
+    ensure_android_config_dir();
     let cfg = Config::load().map_err(|err| err.to_string())?;
     Ok(ConfigDto {
         rendezvous_url: cfg.rendezvous_url,
@@ -27,6 +82,7 @@ pub fn get_config() -> Result<ConfigDto, String> {
 /// rendezvous_url, relay_url, data_dir, overwrite. Returns the normalized
 /// stored value ("true"/"false" for overwrite).
 pub fn set_config(key: String, value: String) -> Result<String, String> {
+    ensure_android_config_dir();
     let mut file = ConfigFile::load().map_err(|err| err.to_string())?;
     let normalized = file.set(&key, &value).map_err(|err| err.to_string())?;
     let path = ConfigFile::path().map_err(|err| err.to_string())?;
@@ -41,13 +97,43 @@ mod tests {
     use super::*;
     use crate::api::ENV_LOCK;
 
+    /// The app-scoped external dir derivation, factored out for host tests.
+    fn app_files_dir(external: &str, pkg: &str) -> PathBuf {
+        PathBuf::from(external)
+            .join("Android/data")
+            .join(pkg)
+            .join("files")
+    }
+
+    #[test]
+    fn android_app_files_dir_shape_matches_get_external_files_dir() {
+        assert_eq!(
+            app_files_dir("/storage/emulated/0", "com.mycroc.app"),
+            PathBuf::from("/storage/emulated/0/Android/data/com.mycroc.app/files")
+        );
+    }
+
+    #[test]
+    fn ensure_android_config_dir_is_noop_off_android() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let had = std::env::var_os(identity::ENV_CONFIG_DIR);
+        // SAFETY: serialized by ENV_LOCK; restored on drop.
+        unsafe {
+            std::env::remove_var(identity::ENV_CONFIG_DIR);
+        }
+        ensure_android_config_dir();
+        assert!(std::env::var_os(identity::ENV_CONFIG_DIR).is_none());
+        if let Some(v) = had {
+            // SAFETY: serialized by ENV_LOCK.
+            unsafe { std::env::set_var(identity::ENV_CONFIG_DIR, v) };
+        }
+    }
+
     /// Point the config dir at a fresh temp dir for the duration of `f`.
     fn with_temp_config<T>(f: impl FnOnce() -> T) -> T {
         let _guard = ENV_LOCK.lock().unwrap();
-        let dir = std::env::temp_dir().join(format!(
-            "my-croc-bridge-config-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("my-croc-bridge-config-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         // SAFETY: serialized by ENV_LOCK; restored on drop.
@@ -81,7 +167,10 @@ mod tests {
     #[test]
     fn set_overwrite_normalizes_bool_strings() {
         with_temp_config(|| {
-            assert_eq!(set_config("overwrite".into(), "false".into()).unwrap(), "false");
+            assert_eq!(
+                set_config("overwrite".into(), "false".into()).unwrap(),
+                "false"
+            );
             assert!(!get_config().unwrap().overwrite);
         });
     }
