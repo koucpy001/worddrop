@@ -8,6 +8,7 @@ pub mod commands;
 pub mod config;
 pub mod error;
 pub mod receive;
+pub mod relay;
 pub mod rendezvous_client;
 pub mod send;
 pub mod ui;

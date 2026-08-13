@@ -11,3 +11,9 @@
 # Android release signing secrets - keystore + key.properties must NEVER be committed
 *.jks
 key.properties
+
+# local agent memory (not for public repo)
+.omo/memory/
+
+# playwright MCP artifacts (local QA evidence, not source)
+.playwright-mcp/
