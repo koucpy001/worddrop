@@ -15,8 +15,8 @@ use crate::{
     cli::{Cli, Commands, ConfigArgs, ConfigCommands, ReceiveArgs, SendArgs},
     config::{Config, ConfigFile},
     error::CliError,
-    rendezvous_client::RvClient,
     relay::relay_mode_from_url,
+    rendezvous_client::RvClient,
     send::{SendOutcome, run_send},
     ui::{SendUi, human_bytes},
     wire::{CONTROL_ALPN, ControlAcceptor, FLOW_TIMEOUT},
@@ -81,10 +81,7 @@ async fn send_async(args: SendArgs) -> Result<String, CliError> {
     let acceptor: Box<dyn iroh::protocol::DynProtocolHandler> =
         ControlAcceptor::new(control_tx).into();
     let relay_mode = relay_mode_from_url(&config.relay_url).map_err(|source| {
-        CliError::runtime(format!(
-            "无效的中继地址 {:?} / {source}",
-            config.relay_url
-        ))
+        CliError::runtime(format!("无效的中继地址 {:?} / {source}", config.relay_url))
     })?;
     let engine = TransferEngine::new_spec(EngineSpec {
         data_dir: &role_data_dir(&config.data_dir, Role::Send),
@@ -173,10 +170,7 @@ async fn receive_async(args: ReceiveArgs) -> Result<String, CliError> {
         let _ = tokio::signal::ctrl_c().await;
     });
     let relay_mode = relay_mode_from_url(&config.relay_url).map_err(|source| {
-        CliError::runtime(format!(
-            "无效的中继地址 {:?} / {source}",
-            config.relay_url
-        ))
+        CliError::runtime(format!("无效的中继地址 {:?} / {source}", config.relay_url))
     })?;
     let outcome = tokio::time::timeout(
         FLOW_TIMEOUT,
