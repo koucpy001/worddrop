@@ -224,51 +224,48 @@ void main() {
     });
   });
 
-  group('official server hint (Bug 4 option B)', () {
-    Future<bridge.ConfigDto> localDefaults() async => bridge.ConfigDto(
-          rendezvousUrl: 'http://127.0.0.1:8080',
-          relayUrl: 'http://127.0.0.1:3340',
+  group('default servers hint (public infra defaults)', () {
+    Future<bridge.ConfigDto> defaultConfig() async => bridge.ConfigDto(
+          rendezvousUrl: 'mqtts://broker.emqx.io:8883',
+          relayUrl: 'public',
           dataDir: '/home/user/.config/worddrop',
           overwrite: false,
         );
 
-    testWidgets('hint shown while both fields hold the 127.0.0.1 defaults',
+    testWidgets('hint shown while both fields hold the built-in defaults',
         (tester) async {
-      await tester.pumpWidget(_settingsApp(getConfig: localDefaults));
+      await tester.pumpWidget(_settingsApp(getConfig: defaultConfig));
       await _pumpFrames(tester);
 
       expect(
-        find.textContaining('官方服务：https://relay.worddrop.cloud'),
-        findsOneWidget,
-      );
-      expect(
-        find.textContaining('https://pair.worddrop.cloud'),
+        find.textContaining('默认使用公共中继 + 公共配对信箱'),
         findsOneWidget,
       );
       // The defaults themselves are unchanged.
-      expect(find.text('http://127.0.0.1:8080'), findsAtLeast(1));
-      expect(find.text('http://127.0.0.1:3340'), findsAtLeast(1));
+      expect(find.text('mqtts://broker.emqx.io:8883'), findsAtLeast(1));
+      expect(find.text('public'), findsAtLeast(1));
     });
 
-    testWidgets('hint disappears as soon as a server field is edited',
+    testWidgets(
+        'hint disappears when relay is filled with a custom URL',
         (tester) async {
-      await tester.pumpWidget(_settingsApp(getConfig: localDefaults));
+      await tester.pumpWidget(_settingsApp(getConfig: defaultConfig));
       await _pumpFrames(tester);
-      expect(find.textContaining('官方服务'), findsOneWidget);
+      expect(find.textContaining('默认使用公共中继'), findsOneWidget);
 
-      final field = find.widgetWithText(TextField, 'http://127.0.0.1:8080');
-      await tester.enterText(field, 'https://pair.worddrop.cloud');
+      final field = find.widgetWithText(TextField, 'public');
+      await tester.enterText(field, 'https://relay.worddrop.cloud');
       await tester.pump();
 
-      expect(find.textContaining('官方服务'), findsNothing);
+      expect(find.textContaining('默认使用公共中继'), findsNothing);
     });
 
-    testWidgets('hint not shown when config already uses public servers',
+    testWidgets('hint not shown when config already uses custom servers',
         (tester) async {
       await tester.pumpWidget(_settingsApp(getConfig: _testConfig));
       await _pumpFrames(tester);
 
-      expect(find.textContaining('官方服务'), findsNothing);
+      expect(find.textContaining('默认使用公共中继'), findsNothing);
     });
   });
 }

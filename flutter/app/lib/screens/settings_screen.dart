@@ -68,11 +68,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) setState(() {});
   }
 
-  /// True while both server fields still show the built-in local defaults
-  /// (127.0.0.1) — i.e. the user has not configured public servers yet.
+  /// True while both server fields still show the built-in defaults
+  /// ("public" relay + public EMQX rendezvous) — i.e. the user has not
+  /// configured custom servers yet.
   bool get _showingDefaultServers {
-    return _rendezvousController.text.contains('127.0.0.1') &&
-        _relayController.text.contains('127.0.0.1');
+    return _rendezvousController.text.contains('broker.emqx.io') &&
+        _relayController.text == 'public';
   }
 
   Future<void> _load() async {
@@ -149,7 +150,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _UrlField(
           controller: _rendezvousController,
           label: '配对服务器地址',
-          hint: 'http://127.0.0.1:8080',
+          hint: 'mqtts://broker.emqx.io:8883',
           icon: Icons.link_outlined,
           onSaved: (v) => _save('rendezvous_url', v),
         ),
@@ -157,7 +158,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _UrlField(
           controller: _relayController,
           label: '中继服务器地址',
-          hint: 'http://127.0.0.1:3340',
+          hint: 'public',
           icon: Icons.cloud_outlined,
           onSaved: (v) => _save('relay_url', v),
         ),
@@ -189,9 +190,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-/// One-line helper shown while the server fields still carry the local
-/// defaults: points the user at the official public servers. Pure hint — the
-/// default values themselves are NOT changed (Bug 4 option B).
+/// One-line helper shown while the server fields still carry the built-in
+/// defaults ("public" relay + public EMQX rendezvous): tells the user the
+/// app works out of the box. Pure hint — the default values themselves are
+/// NOT changed here.
 class _OfficialServerHint extends StatelessWidget {
   const _OfficialServerHint();
 
@@ -211,7 +213,7 @@ class _OfficialServerHint extends StatelessWidget {
           SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
-              '官方服务：https://relay.worddrop.cloud / https://pair.worddrop.cloud（自托管或局域网可留空使用默认）',
+              '默认使用公共中继 + 公共配对信箱，开箱即用；自建服务可在上方填写自己的地址',
               style: TextStyle(
                   fontSize: 12.5, color: Color(0xFF57534E), height: 1.5),
             ),
