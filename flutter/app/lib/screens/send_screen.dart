@@ -8,13 +8,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:app/backend/pairing_backend.dart';
-import 'package:app/services/transfer_history.dart';
-import 'package:app/src/rust/api/events.dart';
-import 'package:app/src/rust/api/session.dart' show PreparedSendDto, SessionRole;
-import 'package:app/theme.dart';
-import 'package:app/util/format.dart';
-import 'package:app/widgets/status_banner.dart';
+import 'package:worddrop/backend/pairing_backend.dart';
+import 'package:worddrop/services/transfer_history.dart';
+import 'package:worddrop/src/rust/api/events.dart';
+import 'package:worddrop/src/rust/api/session.dart' show PreparedSendDto, SessionRole;
+import 'package:worddrop/theme.dart';
+import 'package:worddrop/util/format.dart';
+import 'package:worddrop/widgets/status_banner.dart';
 
 /// Picks files and returns their paths (null when cancelled).
 typedef FilePickFn = Future<List<String>?> Function();

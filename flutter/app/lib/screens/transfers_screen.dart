@@ -8,9 +8,9 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:app/services/transfer_history.dart';
-import 'package:app/theme.dart';
-import 'package:app/util/format.dart';
+import 'package:worddrop/services/transfer_history.dart';
+import 'package:worddrop/theme.dart';
+import 'package:worddrop/util/format.dart';
 
 class TransfersScreen extends StatefulWidget {
   const TransfersScreen({super.key});

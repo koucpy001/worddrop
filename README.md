@@ -21,7 +21,7 @@
 
 ## Status（状态）
 
-- **v0.2.1 已发布**：[GitHub Releases](https://github.com/koucpy001/worddrop/releases/tag/v0.2.1)，
+- **v0.2.2 已发布**：[GitHub Releases](https://github.com/koucpy001/worddrop/releases/tag/v0.2.2)，
   提供 Linux / Windows / macOS 与 Android 的预编译产物（见[下载](#download-下载)）。
 - **仓库公开**：[github.com/koucpy001/worddrop](https://github.com/koucpy001/worddrop)，
   CI 三平台（Linux / Windows / macOS）构建与测试全部通过。
@@ -31,15 +31,18 @@
 
 ## Download (下载)
 
-Release v0.2.1：<https://github.com/koucpy001/worddrop/releases/tag/v0.2.1>
+Release v0.2.2：<https://github.com/koucpy001/worddrop/releases/tag/v0.2.2>
+
+> **全部为便携版（portable / 绿色版）**：zip 解压即用，无需安装程序，不写入注册表
+> 或系统目录，删除即卸载。桌面 GUI 的可执行文件名均为 `worddrop`。
 
 | 资产 | 平台 | 说明 |
 | :--- | :--- | :--- |
-| `worddrop-linux-cli.zip` | Linux x86_64 | 命令行工具（`worddrop`） |
-| `worddrop-linux-app.zip` | Linux x86_64 | 桌面 GUI |
-| `worddrop-windows-cli.zip` | Windows x86_64 | 命令行工具（`worddrop.exe`） |
-| `worddrop-windows-app.zip` | Windows x86_64 | 桌面 GUI |
-| `worddrop-macos-app.zip` | macOS | 桌面 GUI（未签名） |
+| `worddrop-linux-cli.zip` | Linux x86_64 | CLI（单个 `worddrop` 二进制） |
+| `worddrop-linux-app.zip` | Linux x86_64 | 桌面 GUI（`worddrop` + data/） |
+| `worddrop-windows-cli.zip` | Windows x86_64 | CLI（单个 `worddrop.exe`） |
+| `worddrop-windows-app.zip` | Windows x86_64 | 桌面 GUI（`worddrop.exe` + DLL） |
+| `worddrop-macos-app.zip` | macOS | 桌面 GUI（`WordDrop.app`，未签名） |
 | `app-release.apk` | Android（arm64-v8a / armeabi-v7a / x86_64） | release 签名 APK，可直接安装 |
 | `sha256sums.txt` | - | 前五个 zip 的 SHA-256 校验清单 |
 
@@ -48,29 +51,50 @@ Release v0.2.1：<https://github.com/koucpy001/worddrop/releases/tag/v0.2.1>
 
 ## Install (安装)
 
-### Linux CLI
+所有桌面平台均为**解压即用**，无安装程序：
+
+### Linux
 
 ```sh
-# 源码构建
-cargo build --release
-install -m 0755 target/release/worddrop ~/.local/bin/
+# CLI：解压后放入 PATH
+unzip worddrop-linux-cli.zip
+chmod +x worddrop-linux-cli/worddrop
+install -m 0755 worddrop-linux-cli/worddrop ~/.local/bin/
+
+# 桌面 GUI：解压即用（可选：创建桌面入口）
+unzip worddrop-linux-app.zip
+./worddrop-linux-app/worddrop
 ```
 
-也可直接下载 `worddrop-linux-cli.zip`，解压后 `chmod +x worddrop` 放入 `PATH`
-（非静态链接，依赖系统 glibc）。
+也可源码构建：`cargo build --release`（`install -m 0755 target/release/worddrop ~/.local/bin/`）。
+
+### Windows
+
+```sh
+# CLI：解压后 worddrop.exe 放入 PATH 即可
+unzip worddrop-windows-cli.zip
+
+# 桌面 GUI：解压后双击 worddrop.exe 运行（无需安装）
+unzip worddrop-windows-app.zip
+```
+
+未签名构建，SmartScreen 可能提示「未知发布者」，点「更多信息」→「仍要运行」。
+
+### macOS
+
+```sh
+# 解压后直接使用 .app 目录（绿色版，无需拖入 /Applications）
+unzip worddrop-macos-app.zip
+open worddrop-macos-app/WordDrop.app
+```
+
+未签名构建，Gatekeeper 阻止直接打开时右键点击 `.app` → **打开**
+（公证需要付费 Apple Developer 账号，本项目不做）。
 
 ### Android
 
 安装 `app-release.apk`（首次需允许「安装未知来源应用」）。release 构建使用正式密钥
 签名（CN=WordDrop）；本地缺少 `key.properties` 时回退到 debug 签名，回退包仅用于自用。
-
-### Windows / macOS
-
-GitHub Actions 在 tag 推送时自动构建并发布。两平台均为**未签名**构建，安装时会有系统警告：
-
-- **Windows**：SmartScreen 提示「未知发布者」，点「更多信息」→「仍要运行」。
-- **macOS**：Gatekeeper 阻止直接打开，右键点击 `.app` → **打开**。
-  （公证需要付费 Apple Developer 账号，本项目不做。）
 
 ## Usage (使用)
 
@@ -97,18 +121,28 @@ worddrop receive --code 7-correct-horse-battery --output ~/Downloads
 
 ### 配置（服务地址）
 
-客户端默认指向本机（`http://127.0.0.1:8080` rendezvous + `http://127.0.0.1:3340`
-relay），开箱即用于本机 / 局域网 / 离线场景。使用自托管或公共服务时，两端都要设置，
-两种方式任选（环境变量优先级最高）：
+客户端通过 `rendezvous_url` / `relay_url` 找到配对信箱和中继。**这两个地址必须指向
+"跑着服务的那台机器"**，按场景分三种：
+
+| 场景 | rendezvous / relay 填什么 | 说明 |
+| :--- | :--- | :--- |
+| 本机自测（开箱默认） | `127.0.0.1:8080` / `127.0.0.1:3340` | 服务与客户端同机 |
+| 局域网互传 | `http://<服务机IP>:8080` / `:3340` | 其他设备填服务机 IP |
+| 公网互传 | `https://pair.你的域名` / `https://relay.你的域名` | 服务部署在公网 VPS（见[部署](#deployment-部署)） |
+
+> ⚠️ **不要在局域网/公网场景填 `127.0.0.1`**：它指"本机自己"。手机填 `127.0.0.1`
+> 指的是手机自己——那里没有跑服务。必须填跑服务那台机器的局域网 IP 或公网域名。
+
+配置方式任选（环境变量优先级最高 `env > file > default`）：
 
 ```sh
-# 环境变量
-export WORDDROP_RENDEZVOUS_URL=https://pair.worddrop.cloud
-export WORDDROP_RELAY_URL=https://relay.worddrop.cloud
+# 方式一：环境变量
+export WORDDROP_RENDEZVOUS_URL=http://192.168.1.100:8080
+export WORDDROP_RELAY_URL=http://192.168.1.100:3340
 
-# 配置文件（env > file > default）
-worddrop config set rendezvous_url https://pair.worddrop.cloud
-worddrop config set relay_url https://relay.worddrop.cloud
+# 方式二：配置文件
+worddrop config set rendezvous_url http://192.168.1.100:8080
+worddrop config set relay_url http://192.168.1.100:3340
 worddrop config get
 ```
 
@@ -119,8 +153,8 @@ worddrop config get
 | 数据目录 | `WORDDROP_DATA_DIR` | 平台默认配置目录（按 send/receive 角色分子目录） |
 | 配置目录 | `WORDDROP_CONFIG_DIR` | 平台默认配置目录 |
 
-`pair.worddrop.cloud` 与 `relay.worddrop.cloud` 是项目自托管的公共演示服务
-（见[自托管](#self-host-自托管)）。GUI 在设置页填写同样的地址，与 CLI 共用一份配置。
+`pair.worddrop.cloud` 与 `relay.worddrop.cloud` 是项目自托管的公共演示服务（见
+[部署](#deployment-部署)）。GUI 在设置页填写同样的地址，与 CLI 共用一份配置。
 
 ### GUI（Flutter）
 
@@ -263,21 +297,118 @@ words（真正的密码）只存在于两端客户端之间、经 SPAKE2 协商�
    局域网嗅探者能看到谁在跟谁配对（看不到内容）。生产必须 TLS。
 3. 身份密钥（ed25519）保存在本地；丢 key 不会丢文件，但会换身份。
 
-## Self-host (自托管)
+## Deployment (部署)
 
-配对服务（rendezvous）与中继（iroh-relay）都可以自托管，完整部署文档见
-**[`deploy/README.md`](deploy/README.md)**，这里只给要点：
+### 为什么需要部署？什么时候需要？
 
-- **Docker Compose**：一台 VPS 一条命令起两个容器，生产模式内置 Caddy 自动申请
-  Let's Encrypt 证书终结 TLS，无需人工生成证书。
-- **systemd**：裸机 / 不想用 Docker 时的替代方案。
-- 防火墙只需放行 80/443 TCP（Caddy 终结 TLS）；不开任何 UDP 端口，客户端的 relay
-  数据路径是 WebSocket-over-TLS。
-- 部署完成后，两端把 `WORDDROP_RENDEZVOUS_URL` / `WORDDROP_RELAY_URL` 指向自己的
-  域名即可。
+WordDrop 是 P2P 传输工具，**两个服务都不在传输链路上**，它们是"可用性增强器"：
 
-项目自托管的公共演示服务跑在 `pair.worddrop.cloud`（rendezvous）与
-`relay.worddrop.cloud`（relay），可直接用于体验或日常使用。
+- **rendezvous（配对信箱）**：解决"怎么找到对方"——发送方拿数字号牌挂号，接收方凭号牌取回地址。只看到数字 nameplate，看不到单词密码和文件。
+- **iroh relay（中继）**：解决"连不上怎么办"——NAT 打洞失败时兜底转发**密文**，无法解密。
+
+| 场景 | 需要部署吗 | 怎么传 |
+| :--- | :--- | :--- |
+| 本机自测（默认配置） | ❌ 不需要 | 默认就指向 `127.0.0.1` |
+| 同一局域网 | ⚠️ 一台设备跑服务 | 直连打洞即可，服务只需 rendezvous（relay 基本闲置） |
+| 跨公网 / NAT | ✅ 需要 | 打洞优先，失败走 relay |
+
+### 服务器二进制从哪来？
+
+release 资产只有**客户端**（CLI + GUI + APK），**没有服务器二进制**。服务器两种获取方式：
+
+```sh
+# 方式一（推荐）：Docker Compose 自动构建（见下文"公网部署"）
+# 方式二：源码构建
+cargo build --release -p worddrop-rendezvous          # 配对信箱 → target/release/worddrop-rendezvous
+# 中继（必须带 --features server）
+cargo install iroh-relay --version 1.0.3 --features server
+```
+
+### 方案 A：局域网快速部署（免 Docker，最轻）
+
+在局域网里**任选一台设备**（你的台式机即可，无需额外机器）跑两个服务：
+
+```sh
+# 1. 构建（只需一次；本机已 build 则跳过）
+cargo build --release -p worddrop-rendezvous
+cargo install iroh-relay --version 1.0.3 --features server
+
+# 2. 启动服务（两个终端或 nohup）
+# rendezvous：默认 127.0.0.1:8080；局域网要让其他设备连，必须绑 0.0.0.0
+WORDDROP_RENDEZVOUS_ADDR=0.0.0.0:8080 ./target/release/worddrop-rendezvous
+# relay：--dev 模式跑纯 HTTP，监听 3340
+iroh-relay --dev
+
+# 3. 查看本机局域网 IP
+ip addr | grep 'inet ' | grep -v 127.0.0.1
+# 例如 192.168.1.100
+```
+
+其他设备（手机/另一台电脑）指向服务机：
+
+```sh
+worddrop config set rendezvous_url http://192.168.1.100:8080
+worddrop config set relay_url http://192.168.1.100:3340
+```
+
+> 资源占用实测：rendezvous ~2.5 MiB、relay ~2.3 MiB、CPU 接近 0。任何设备都能当服务机。
+> 局域网内 rendezvous 是必需（配对流程依赖），relay 基本闲置但保留地址以防打洞失败。
+
+### 方案 B：公网部署（VPS + Docker Compose，含自动 HTTPS）
+
+前置条件：
+
+- 一台有公网 IP 的 VPS（最低 1 核 512M 即可，整套 <20 MiB 内存）
+- 一个域名，解析两个子域到 VPS（如 `pair.example.com`、`relay.example.com`）
+- 防火墙放行 **80/443 TCP**（Caddy 负责 TLS；**不需要开任何 UDP 端口**）
+
+```sh
+# 1. 拉取仓库到 VPS
+git clone https://github.com/koucpy001/worddrop.git
+cd worddrop/deploy
+
+# 2. 把 Caddyfile 里的两个域名换成你自己的
+#    （把 pair.worddrop.cloud / relay.worddrop.cloud 替换为你的域名）
+sed -i 's/pair.worddrop.cloud/pair.example.com/g; s/relay.worddrop.cloud/relay.example.com/g' Caddyfile
+
+# 3. 启动（首次构建约 10-20 分钟编译 Rust，之后增量秒级）
+docker compose up -d --build
+
+# 4. 验证
+docker compose ps                 # 四个容器全部 Up (healthy)
+curl -fsSL https://pair.example.com/health     # → ok
+curl -fsSL https://relay.example.com/          # → "Iroh Relay" 页面
+```
+
+客户端两端指向你的域名：
+
+```sh
+worddrop config set rendezvous_url https://pair.example.com
+worddrop config set relay_url https://relay.example.com
+```
+
+**原理**：Caddy 独占 80/443，自动向 Let's Encrypt 申请并续期两个域名的证书（零人工），
+把 `pair` 反代到 rendezvous :8080、`relay`（含 WebSocket /relay）反代到 relay :80。
+证书持久化在 `caddy-data` 卷，重建容器不丢。详见 [`deploy/README.md`](deploy/README.md)。
+
+### 方案 C：直接使用公共服务（零部署）
+
+项目维护的公共演示服务可直接用于体验或日常使用，两端设置：
+
+```sh
+worddrop config set rendezvous_url https://pair.worddrop.cloud
+worddrop config set relay_url https://relay.worddrop.cloud
+```
+
+> ⚠️ 公共服务按"演示"标准运维（无 SLA、可能限速）。正式使用建议自托管（方案 A/B）。
+
+### 运维要点
+
+- **版本固定**：iroh-relay 与客户端 iroh 必须都是 **1.0.3**，升级需两端同步。
+- **证书续期**：Caddy 自动续期，无需人工介入。
+- **安全**：relay 转发的是 iroh QUIC 密文（端到端加密），它看不到文件内容；生产环境
+  必须走 TLS（Caddy 已处理），不要直接暴露 8080/3340/9090 到公网。
+- 完整文档（systemd 裸机方案、防火墙明细、TLS 原理）：**[`deploy/README.md`](deploy/README.md)**。
 
 ## Development (开发指南)
 

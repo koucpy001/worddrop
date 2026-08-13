@@ -7,8 +7,8 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:app/src/rust/api/config.dart' as bridge;
-import 'package:app/theme.dart';
+import 'package:worddrop/src/rust/api/config.dart' as bridge;
+import 'package:worddrop/theme.dart';
 
 /// Injectable config callbacks so widget tests stay hermetic.
 typedef GetConfigFn = Future<bridge.ConfigDto> Function();

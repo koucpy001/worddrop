@@ -14,12 +14,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:app/backend/fake_backend.dart';
-import 'package:app/screens/receive_screen.dart';
-import 'package:app/screens/send_screen.dart';
-import 'package:app/services/transfer_history.dart';
-import 'package:app/src/rust/api/events.dart';
-import 'package:app/src/rust/api/session.dart'
+import 'package:worddrop/backend/fake_backend.dart';
+import 'package:worddrop/screens/receive_screen.dart';
+import 'package:worddrop/screens/send_screen.dart';
+import 'package:worddrop/services/transfer_history.dart';
+import 'package:worddrop/src/rust/api/events.dart';
+import 'package:worddrop/src/rust/api/session.dart'
     show FileMetaDto, PreparedSendDto;
 import 'package:flutter/material.dart';
 

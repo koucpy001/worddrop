@@ -12,9 +12,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:app/screens/transfers_screen.dart';
-import 'package:app/services/transfer_history.dart';
-import 'package:app/theme.dart';
+import 'package:worddrop/screens/transfers_screen.dart';
+import 'package:worddrop/services/transfer_history.dart';
+import 'package:worddrop/theme.dart';
 
 Widget _wrapApp() => MaterialApp(
       theme: buildAppTheme(),

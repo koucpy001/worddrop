@@ -3,7 +3,7 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:app/theme.dart';
+import 'package:worddrop/theme.dart';
 
 enum BannerVariant { info, success, error, cancelled }
 

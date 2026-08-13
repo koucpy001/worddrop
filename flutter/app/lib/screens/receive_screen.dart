@@ -5,14 +5,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'package:app/backend/pairing_backend.dart';
-import 'package:app/services/transfer_history.dart';
-import 'package:app/src/rust/api/events.dart';
-import 'package:app/src/rust/api/session.dart' show OfferDto, SessionRole;
-import 'package:app/theme.dart';
-import 'package:app/util/format.dart';
-import 'package:app/widgets/offer_dialog.dart';
-import 'package:app/widgets/status_banner.dart';
+import 'package:worddrop/backend/pairing_backend.dart';
+import 'package:worddrop/services/transfer_history.dart';
+import 'package:worddrop/src/rust/api/events.dart';
+import 'package:worddrop/src/rust/api/session.dart' show OfferDto, SessionRole;
+import 'package:worddrop/theme.dart';
+import 'package:worddrop/util/format.dart';
+import 'package:worddrop/widgets/offer_dialog.dart';
+import 'package:worddrop/widgets/status_banner.dart';
 
 enum ReceiveStage { input, connecting, transferring, done, failed, cancelled, declined }
 

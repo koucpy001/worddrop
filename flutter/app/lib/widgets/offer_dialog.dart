@@ -4,9 +4,9 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:app/src/rust/api/session.dart' show FileMetaDto, OfferDto;
-import 'package:app/theme.dart';
-import 'package:app/util/format.dart';
+import 'package:worddrop/src/rust/api/session.dart' show FileMetaDto, OfferDto;
+import 'package:worddrop/theme.dart';
+import 'package:worddrop/util/format.dart';
 
 /// Returns `true` when the user accepted the offer.
 Future<bool> showOfferDialog(BuildContext context, OfferDto offer) async {

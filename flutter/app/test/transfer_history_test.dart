@@ -11,7 +11,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:app/services/transfer_history.dart';
+import 'package:worddrop/services/transfer_history.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

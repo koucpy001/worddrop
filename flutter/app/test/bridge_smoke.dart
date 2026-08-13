@@ -21,11 +21,11 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_io.dart'
     show ExternalLibrary;
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:app/src/rust/api/config.dart';
-import 'package:app/src/rust/api/events.dart';
-import 'package:app/src/rust/api/hello.dart';
-import 'package:app/src/rust/api/session.dart';
-import 'package:app/src/rust/frb_generated.dart';
+import 'package:worddrop/src/rust/api/config.dart';
+import 'package:worddrop/src/rust/api/events.dart';
+import 'package:worddrop/src/rust/api/hello.dart';
+import 'package:worddrop/src/rust/api/session.dart';
+import 'package:worddrop/src/rust/frb_generated.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

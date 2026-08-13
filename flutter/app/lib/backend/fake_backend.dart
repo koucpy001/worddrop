@@ -8,9 +8,9 @@
 
 import 'dart:async';
 
-import 'package:app/backend/pairing_backend.dart';
-import 'package:app/src/rust/api/events.dart';
-import 'package:app/src/rust/api/session.dart'
+import 'package:worddrop/backend/pairing_backend.dart';
+import 'package:worddrop/src/rust/api/events.dart';
+import 'package:worddrop/src/rust/api/session.dart'
     show FileMetaDto, OfferDto, PreparedSendDto, SessionRole;
 
 /// Demo pairing code (fixed so screenshots are deterministic).

@@ -25,9 +25,9 @@
 # - The Cargo registry + git caches are keyed on Cargo.lock hashes; both the
 #   root workspace and the standalone flutter/rust bridge workspace lockfiles
 #   are covered by hashFiles('**/Cargo.lock').
-# - `flutter/app` ships only the android + linux platform dirs; the macos/
-#   and windows/ dirs are generated in CI via `flutter create --platforms=...`
-#   (keeps the repo lean; generated dirs are build-time only).
+# - `flutter/app` ships all four desktop platform dirs (android, linux,
+#   windows, macos); they are committed so the built app is named `worddrop`
+#   on every platform (pubspec `name: worddrop` drives the template names).
 # - rust 1.97.1 comes from rust-toolchain.toml (dtolnay/rust-toolchain reads
 #   it); flutter 3.44.9 matches the locally verified toolchain.
 # - No secrets, no keystore in CI: the release job publishes only the build
@@ -195,10 +195,6 @@ jobs:
           flutter-version: 3.44.9
           cache: true
 
-      - name: Add Windows desktop platform (flutter create)
-        working-directory: flutter/app
-        run: flutter create --platforms=windows .
-
       - name: Flutter pub get
         working-directory: flutter/app
         run: flutter pub get
@@ -267,10 +263,6 @@ jobs:
           channel: stable
           flutter-version: 3.44.9
           cache: true
-
-      - name: Add macOS desktop platform (flutter create)
-        working-directory: flutter/app
-        run: flutter create --platforms=macos .
 
       - name: Flutter pub get
         working-directory: flutter/app

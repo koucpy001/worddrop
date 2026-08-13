@@ -6,9 +6,9 @@
 
 import 'dart:async';
 
-import 'package:app/src/rust/api/events.dart';
-import 'package:app/src/rust/api/session.dart' as bridge;
-import 'package:app/src/rust/api/session.dart' show OfferDto, PreparedSendDto;
+import 'package:worddrop/src/rust/api/events.dart';
+import 'package:worddrop/src/rust/api/session.dart' as bridge;
+import 'package:worddrop/src/rust/api/session.dart' show OfferDto, PreparedSendDto;
 
 /// A session endpoint the pairing screens drive.
 abstract interface class SessionBackend {

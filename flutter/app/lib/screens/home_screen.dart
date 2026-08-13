@@ -6,12 +6,12 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:app/backend/pairing_backend.dart';
-import 'package:app/screens/receive_screen.dart';
-import 'package:app/screens/send_screen.dart';
-import 'package:app/screens/settings_screen.dart';
-import 'package:app/screens/transfers_screen.dart';
-import 'package:app/theme.dart';
+import 'package:worddrop/backend/pairing_backend.dart';
+import 'package:worddrop/screens/receive_screen.dart';
+import 'package:worddrop/screens/send_screen.dart';
+import 'package:worddrop/screens/settings_screen.dart';
+import 'package:worddrop/screens/transfers_screen.dart';
+import 'package:worddrop/theme.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.backendFactory});

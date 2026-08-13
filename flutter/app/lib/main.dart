@@ -6,12 +6,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import 'package:app/backend/fake_backend.dart';
-import 'package:app/backend/pairing_backend.dart';
-import 'package:app/screens/home_screen.dart';
-import 'package:app/src/rust/api/session.dart' as bridge;
-import 'package:app/src/rust/frb_generated.dart';
-import 'package:app/theme.dart';
+import 'package:worddrop/backend/fake_backend.dart';
+import 'package:worddrop/backend/pairing_backend.dart';
+import 'package:worddrop/screens/home_screen.dart';
+import 'package:worddrop/src/rust/api/session.dart' as bridge;
+import 'package:worddrop/src/rust/frb_generated.dart';
+import 'package:worddrop/theme.dart';
 
 bool get _demoMode => Platform.environment['WORDDROP_DEMO_MODE'] == 'true';
 

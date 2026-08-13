@@ -9,9 +9,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:app/screens/settings_screen.dart';
-import 'package:app/src/rust/api/config.dart' as bridge;
-import 'package:app/theme.dart';
+import 'package:worddrop/screens/settings_screen.dart';
+import 'package:worddrop/src/rust/api/config.dart' as bridge;
+import 'package:worddrop/theme.dart';
 
 Widget _wrap(SettingsScreen screen) => MaterialApp(
       theme: buildAppTheme(),

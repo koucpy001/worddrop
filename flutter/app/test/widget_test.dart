@@ -2,9 +2,9 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:app/main.dart';
-import 'package:app/screens/receive_screen.dart';
-import 'package:app/screens/send_screen.dart';
+import 'package:worddrop/main.dart';
+import 'package:worddrop/screens/receive_screen.dart';
+import 'package:worddrop/screens/send_screen.dart';
 
 void main() {
   testWidgets('home screen shows both pairing entries', (tester) async {

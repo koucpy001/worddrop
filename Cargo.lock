@@ -4837,7 +4837,7 @@ dependencies = [
 
 [[package]]
 name = "worddrop-cli"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "clap",
  "indicatif",
@@ -4860,7 +4860,7 @@ dependencies = [
 
 [[package]]
 name = "worddrop-core"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "dirs",
  "hkdf",
@@ -4881,7 +4881,7 @@ dependencies = [
 
 [[package]]
 name = "worddrop-rendezvous"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "axum",
  "rand 0.9.5",
