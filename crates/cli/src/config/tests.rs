@@ -110,6 +110,7 @@ fn config_resolve_env_wins_over_file() {
     let cfg = Config::resolve(&full_file()).expect("resolve");
     assert_eq!(cfg.relay_url, "http://env-relay:9999");
     assert_eq!(cfg.rendezvous_url, "http://rv.example:8080");
+    unsafe { set_env(identity::ENV_RELAY_URL, None) };
 }
 
 #[test]
@@ -128,6 +129,32 @@ fn config_resolve_defaults() {
         cfg.data_dir,
         identity::Config::config_dir().expect("platform config dir")
     );
+}
+
+/// The built-in defaults point at public infrastructure: the EMQX public
+/// MQTT broker as pairing mailbox and the special `"public"` relay value.
+#[test]
+fn config_resolve_public_infra_defaults() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    unsafe {
+        set_env(identity::ENV_RENDEZVOUS_URL, None);
+        set_env(identity::ENV_RELAY_URL, None);
+        set_env(identity::ENV_DATA_DIR, None);
+    }
+    let cfg = Config::resolve(&ConfigFile::default()).expect("resolve");
+    assert_eq!(cfg.relay_url, "public");
+    assert_eq!(cfg.rendezvous_url, "mqtts://broker.emqx.io:8883");
+}
+
+/// Env overrides still win over the `"public"` default relay value.
+#[test]
+fn config_resolve_env_overrides_public_relay_default() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    unsafe { set_env(identity::ENV_RELAY_URL, Some("http://env-relay:9999")) };
+    let cfg = Config::resolve(&ConfigFile::default()).expect("resolve");
+    assert_eq!(cfg.relay_url, "http://env-relay:9999");
+    assert_eq!(cfg.rendezvous_url, "mqtts://broker.emqx.io:8883");
+    unsafe { set_env(identity::ENV_RELAY_URL, None) };
 }
 
 #[test]

@@ -150,6 +150,12 @@ impl TransferEngine {
     /// Create an engine from the core [`Config`]: the blob store lives at
     /// `<data_dir>/blobs` and the endpoint uses the configured self-hosted
     /// relay URL.
+    ///
+    /// This constructor does NOT accept the special values `"public"` /
+    /// `"disabled"` — it always builds a [`RelayMode::Custom`] endpoint. It is
+    /// only for explicit custom-relay scenarios; use
+    /// [`TransferEngine::with_relay_mode`] (via `relay_mode_from_url`) for the
+    /// special values.
     pub async fn new(config: &Config) -> Result<Self, Error> {
         let relay = RelayUrl::from_str(&config.relay_url).map_err(|source| Error::RelayUrl {
             url: config.relay_url.clone(),

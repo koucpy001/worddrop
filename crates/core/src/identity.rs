@@ -24,10 +24,14 @@ use std::{
 
 use iroh::{PublicKey, SecretKey};
 
-/// Default rendezvous server URL (dev: local axum mailbox server).
-pub const DEFAULT_RENDEZVOUS_URL: &str = "http://127.0.0.1:8080";
-/// Default relay server URL (dev: local iroh-relay).
-pub const DEFAULT_RELAY_URL: &str = "http://127.0.0.1:3340";
+/// Default rendezvous server URL: the EMQX public MQTT broker, used as a
+/// public pairing mailbox (`mqtts://broker.emqx.io:8883`). Override for
+/// self-hosted/local deployments.
+pub const DEFAULT_RENDEZVOUS_URL: &str = "mqtts://broker.emqx.io:8883";
+/// Default relay URL: the special value `"public"`, resolved by
+/// `relay_mode_from_url` into `RelayMode::Default` (iroh's public relay).
+/// Override with an explicit URL for self-hosted/local relays.
+pub const DEFAULT_RELAY_URL: &str = "public";
 /// File name of the persisted identity key inside the config dir.
 pub const KEY_FILE: &str = "key.bin";
 
