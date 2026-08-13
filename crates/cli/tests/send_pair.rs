@@ -118,7 +118,10 @@ async fn run_fake_peer(
     action: PeerAction,
 ) -> Result<(), String> {
     let (nameplate, words) = WordCode::split(code).map_err(|err| err.to_string())?;
-    let ticket_str = rv.claim(nameplate).await.map_err(|err| err.to_string())?;
+    let ticket_str = rv
+        .claim(nameplate, &words)
+        .await
+        .map_err(|err| err.to_string())?;
     let ticket =
         BlobTicket::from_str(&ticket_str).map_err(|_| format!("invalid ticket {ticket_str:?}"))?;
 

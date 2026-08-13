@@ -239,7 +239,7 @@ where
     let ticket_str = tokio::select! {
         biased;
         _ = &mut interrupt => return Ok(ReceiveOutcome::Cancelled),
-        result = rv.claim(nameplate) => result?,
+        result = rv.claim(nameplate, &words) => result?,
     };
     let ticket =
         BlobTicket::from_str(&ticket_str).map_err(|_| RecvError::Ticket(ticket_str.clone()))?;

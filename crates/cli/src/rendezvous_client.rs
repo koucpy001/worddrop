@@ -1,12 +1,20 @@
-//! HTTP client for the worddrop rendezvous server (T6).
+//! Rendezvous client with per-scheme backend dispatch (T6).
 //!
-//! A minimal HTTP/1.1 client (one request per connection, `Connection:
-//! close`) — the same pattern the T11 e2e test proved against the real axum
-//! server. The rendezvous protocol is three fixed one-shot JSON endpoints, so
-//! a full HTTP stack (reqwest would drag in hyper/rustls/tower) is not worth
-//! a large dependency tree on a RAM-constrained host for two requests per CLI
-//! run. Timeouts are built in: a dead server surfaces in [`REQUEST_TIMEOUT`],
-//! never a hang.
+//! [`RvClient`] picks its transport backend from the base URL's scheme at
+//! construction time: `http`/`https` → [`HttpBackend`] (the HTTP/1.1 client
+//! below), `mqtt`/`mqtts` → [`MqttBackend`] (placeholder until Todo 7 fills
+//! in the rumqttc implementation). Any other scheme is captured as
+//! [`Backend::Invalid`] and only surfaces as [`RvError::BadUrl`] on the
+//! first method call — so [`RvClient::new`] stays infallible and no caller
+//! needs a `Result`.
+//!
+//! The HTTP backend is a minimal HTTP/1.1 client (one request per
+//! connection, `Connection: close`) — the same pattern the T11 e2e test
+//! proved against the real axum server. The rendezvous protocol is three
+//! fixed one-shot JSON endpoints, so a full HTTP stack (reqwest would drag
+//! in hyper/rustls/tower) is not worth a large dependency tree on a
+//! RAM-constrained host for two requests per CLI run. Timeouts are built
+//! in: a dead server surfaces in [`REQUEST_TIMEOUT`], never a hang.
 //!
 //! T4: `https` origins are supported — the plaintext socket is wrapped in
 //! rustls (stock webpki roots, same trust policy as iroh: no custom CA, no
@@ -14,9 +22,11 @@
 //! `https://pair.worddrop.cloud` works as-is against a TLS-terminating
 //! reverse proxy (Caddy).
 //!
-//! SECURITY (F1): only the ticket goes to the server on `allocate`; the
-//! word-code secret words never leave the client, so this module has no API
-//! to send them.
+//! SECURITY (F1): on the HTTP path only the ticket goes to the server on
+//! `allocate`; the word-code secret words never leave the client — the HTTP
+//! backend ignores the `words` argument of `claim`/`publish`/`cleanup`. The
+//! MQTT backend (Todo 7) is the only place that may use `words` (the broker
+//! exchange needs the pairing secret).
 
 use std::{
     fmt, io,
@@ -76,7 +86,7 @@ pub enum RvError {
     Http { status: u16, body: String },
     /// Transport-level failure (connect refused, reset, ...).
     Io(io::Error),
-    /// The rendezvous URL is not a usable http/https origin.
+    /// The rendezvous URL is not a usable http/https/mqtt/mqtts origin.
     BadUrl { url: String, reason: String },
     /// TLS handshake or certificate verification failed (https origin).
     Tls { detail: String },
@@ -84,6 +94,9 @@ pub enum RvError {
     Timeout,
     /// The response body did not parse as the expected shape.
     Parse { kind: &'static str, body: String },
+    /// The selected backend is a placeholder: MQTT support lands in a later
+    /// step (Todo 7) and is not callable yet.
+    Unimplemented { detail: String },
 }
 
 impl fmt::Display for RvError {
@@ -118,6 +131,10 @@ impl fmt::Display for RvError {
                     "解析 {kind} 响应失败 / failed to parse {kind} response: {body}"
                 )
             }
+            Self::Unimplemented { detail } => write!(
+                f,
+                "该后端暂未实现: {detail} / this backend is not implemented yet: {detail}"
+            ),
         }
     }
 }
@@ -130,32 +147,175 @@ impl std::error::Error for RvError {
             | RvError::BadUrl { .. }
             | RvError::Tls { .. }
             | RvError::Timeout
-            | RvError::Parse { .. } => None,
+            | RvError::Parse { .. }
+            | RvError::Unimplemented { .. } => None,
         }
     }
 }
 
-/// Client for the three rendezvous endpoints plus `/health`.
+/// Client for the rendezvous service, dispatched to the transport backend
+/// chosen from the base URL's scheme at [`RvClient::new`].
 #[derive(Debug, Clone)]
 pub struct RvClient {
     base: String,
+    backend: Backend,
+}
+
+/// The transport backend selected from the base URL's scheme.
+///
+/// `Invalid` carries the deferred reason: the URL parsed but its scheme is
+/// not usable (or the URL does not parse at all). It only surfaces as
+/// [`RvError::BadUrl`] on the first method call, keeping [`RvClient::new`]
+/// infallible.
+#[derive(Debug, Clone)]
+enum Backend {
+    /// `http`/`https` origin: the one-shot JSON API (see [`HttpBackend`]).
+    Http(HttpBackend),
+    /// `mqtt`/`mqtts` broker: placeholder until Todo 7 (see [`MqttBackend`]).
+    Mqtt(MqttBackend),
+    /// Anything else: reason for the deferred [`RvError::BadUrl`].
+    Invalid(String),
+}
+
+impl RvClient {
+    /// `base` is the server origin: `http://127.0.0.1:8080` (LAN dev),
+    /// `https://pair.worddrop.cloud` (production, TLS-terminated by Caddy)
+    /// or an MQTT broker such as `mqtts://broker.emqx.io:8883` (public
+    /// default, Todo 4).
+    ///
+    /// Infallible: the scheme is dispatched now, but an unusable scheme is
+    /// only reported as [`RvError::BadUrl`] on the first method call.
+    pub fn new(base: &str) -> Self {
+        let backend = match Url::parse(base) {
+            Ok(url) => match url.scheme() {
+                "http" | "https" => Backend::Http(HttpBackend::new(base)),
+                "mqtt" | "mqtts" => Backend::Mqtt(MqttBackend::new(base)),
+                scheme => Backend::Invalid(format!(
+                    "unsupported scheme {scheme:?} (http, https, mqtt or mqtts only)"
+                )),
+            },
+            Err(source) => Backend::Invalid(format!("cannot parse as a URL: {source}")),
+        };
+        Self {
+            base: base.to_string(),
+            backend,
+        }
+    }
+
+    /// The deferred [`RvError::BadUrl`] for a [`Backend::Invalid`] base.
+    fn bad_url(&self, reason: &str) -> RvError {
+        RvError::BadUrl {
+            url: self.base.clone(),
+            reason: reason.to_string(),
+        }
+    }
+
+    /// Allocate a nameplate for `ticket` (POST /v1/pairs on HTTP).
+    pub async fn allocate(&self, ticket: &str) -> Result<Allocation, RvError> {
+        match &self.backend {
+            Backend::Http(backend) => backend.allocate(ticket).await,
+            Backend::Mqtt(backend) => backend.allocate(ticket).await,
+            Backend::Invalid(reason) => Err(self.bad_url(reason)),
+        }
+    }
+
+    /// Register the pairing code with the rendezvous so the receiver can
+    /// claim it (Todo 8 wires this into the send flow).
+    ///
+    /// CONTRACT: `words` is exactly
+    /// [`WordCode::password()`](worddrop_core::pairing::wordcode::WordCode::password)
+    /// — the three hyphen-joined secret words (e.g. `"correct-horse-battery"`),
+    /// NOT the `[String; 3]` array. The HTTP backend treats this as a no-op:
+    /// the words never leave the client on the HTTP path (F1). The MQTT
+    /// backend publishes them per its broker protocol (Todo 7).
+    pub async fn publish(&self, ticket: &str, nameplate: u32, words: &str) -> Result<(), RvError> {
+        match &self.backend {
+            Backend::Http(backend) => backend.publish(ticket, nameplate, words).await,
+            Backend::Mqtt(backend) => backend.publish(ticket, nameplate, words).await,
+            Backend::Invalid(reason) => Err(self.bad_url(reason)),
+        }
+    }
+
+    /// One-shot claim: returns the stored ticket, or the server's error
+    /// (404 = already claimed / never existed, 410 = expired).
+    ///
+    /// CONTRACT: `words` is exactly
+    /// [`WordCode::password()`](worddrop_core::pairing::wordcode::WordCode::password)
+    /// — the three hyphen-joined secret words (e.g. `"correct-horse-battery"`),
+    /// NOT the `[String; 3]` array. The HTTP backend ignores it (claim is
+    /// nameplate-only on the wire, F1); the MQTT backend dispatches on it
+    /// (Todo 7).
+    pub async fn claim(&self, nameplate: u32, words: &str) -> Result<String, RvError> {
+        match &self.backend {
+            Backend::Http(backend) => backend.claim(nameplate, words).await,
+            Backend::Mqtt(backend) => backend.claim(nameplate, words).await,
+            Backend::Invalid(reason) => Err(self.bad_url(reason)),
+        }
+    }
+
+    /// Release the nameplate / pairing state after the transfer (Todo 8
+    /// wires this into the flows).
+    ///
+    /// CONTRACT: `words` is exactly
+    /// [`WordCode::password()`](worddrop_core::pairing::wordcode::WordCode::password)
+    /// — the three hyphen-joined secret words (e.g. `"correct-horse-battery"`),
+    /// NOT the `[String; 3]` array. The HTTP backend treats this as a no-op;
+    /// the MQTT backend cleans up its broker state (Todo 7).
+    pub async fn cleanup(&self, nameplate: u32, words: &str) -> Result<(), RvError> {
+        match &self.backend {
+            Backend::Http(backend) => backend.cleanup(nameplate, words).await,
+            Backend::Mqtt(backend) => backend.cleanup(nameplate, words).await,
+            Backend::Invalid(reason) => Err(self.bad_url(reason)),
+        }
+    }
+
+    /// Poll the lifecycle of a nameplate (GET /v1/pairs/{n}/status on HTTP).
+    pub async fn status(&self, nameplate: u32) -> Result<PairState, RvError> {
+        match &self.backend {
+            Backend::Http(backend) => backend.status(nameplate).await,
+            Backend::Mqtt(backend) => backend.status(nameplate).await,
+            Backend::Invalid(reason) => Err(self.bad_url(reason)),
+        }
+    }
+
+    /// GET /health on HTTP; Ok when the server answers "ok".
+    pub async fn health(&self) -> Result<(), RvError> {
+        match &self.backend {
+            Backend::Http(backend) => backend.health().await,
+            Backend::Mqtt(backend) => backend.health().await,
+            Backend::Invalid(reason) => Err(self.bad_url(reason)),
+        }
+    }
 }
 
 /// A request connection: plain TCP for http origins, TLS-wrapped for https.
 trait ConnIo: AsyncRead + AsyncWrite + Unpin + Send {}
 impl<T: AsyncRead + AsyncWrite + Unpin + Send> ConnIo for T {}
 
-impl RvClient {
-    /// `base` is the server origin, e.g. `http://127.0.0.1:8080` (LAN dev) or
-    /// `https://pair.worddrop.cloud` (production, TLS-terminated by Caddy).
-    pub fn new(base: &str) -> Self {
+/// HTTP/1.1 backend for `http`/`https` origins: the one-shot JSON API.
+///
+/// Holds the original rendezvous client logic, moved verbatim.
+#[derive(Debug, Clone)]
+pub(crate) struct HttpBackend {
+    base: String,
+}
+
+impl HttpBackend {
+    fn new(base: &str) -> Self {
         Self {
             base: base.to_string(),
         }
     }
 
+    /// HTTP `publish` is a no-op: the word-code secret words never leave the
+    /// client on the HTTP path (F1); the rendezvous only ever stores the
+    /// ticket under the numeric nameplate.
+    async fn publish(&self, _ticket: &str, _nameplate: u32, _words: &str) -> Result<(), RvError> {
+        Ok(())
+    }
+
     /// Allocate a nameplate for `ticket` (POST /v1/pairs).
-    pub async fn allocate(&self, ticket: &str) -> Result<Allocation, RvError> {
+    async fn allocate(&self, ticket: &str) -> Result<Allocation, RvError> {
         let body = serde_json::json!({ "ticket": ticket }).to_string();
         let (status, response) = self.request("POST", "/v1/pairs", Some(&body)).await?;
         if status != 201 {
@@ -176,8 +336,9 @@ impl RvClient {
     }
 
     /// One-shot claim: returns the stored ticket, or the server's error
-    /// (404 = already claimed / never existed, 410 = expired).
-    pub async fn claim(&self, nameplate: u32) -> Result<String, RvError> {
+    /// (404 = already claimed / never existed, 410 = expired). `words` is
+    /// ignored: the claim is nameplate-only on the wire (F1).
+    async fn claim(&self, nameplate: u32, _words: &str) -> Result<String, RvError> {
         let (status, response) = self
             .request("POST", &format!("/v1/pairs/{nameplate}/claim"), None)
             .await?;
@@ -194,8 +355,14 @@ impl RvClient {
         Ok(value.ticket)
     }
 
+    /// HTTP `cleanup` is a no-op: there is no server-side state to release
+    /// beyond the claim's one-shot semantics.
+    async fn cleanup(&self, _nameplate: u32, _words: &str) -> Result<(), RvError> {
+        Ok(())
+    }
+
     /// Poll the lifecycle of a nameplate (GET /v1/pairs/{n}/status).
-    pub async fn status(&self, nameplate: u32) -> Result<PairState, RvError> {
+    async fn status(&self, nameplate: u32) -> Result<PairState, RvError> {
         let (status, response) = self
             .request("GET", &format!("/v1/pairs/{nameplate}/status"), None)
             .await?;
@@ -217,7 +384,7 @@ impl RvClient {
     }
 
     /// GET /health; Ok when the server answers "ok".
-    pub async fn health(&self) -> Result<(), RvError> {
+    async fn health(&self) -> Result<(), RvError> {
         let (status, response) = self.request("GET", "/health", None).await?;
         if status == 200 && response.trim() == "ok" {
             Ok(())
@@ -355,6 +522,72 @@ impl RvClient {
                 body: head.to_string(),
             })?;
         Ok((status, body.to_string()))
+    }
+}
+
+/// MQTT broker backend (`mqtt`/`mqtts`), placeholder until Todo 7.
+///
+/// The real implementation — rumqttc connect, `derive_topic(nameplate)`
+/// topic derivation, publish/claim/cleanup against the broker — lands in
+/// Todo 7 and follows the same `words` contract as [`RvClient`]: `words` is
+/// exactly
+/// [`WordCode::password()`](worddrop_core::pairing::wordcode::WordCode::password)
+/// (hyphen-joined, e.g. `"correct-horse-battery"`), never the `[String; 3]`
+/// array. Until then every operation except `status` (which reports
+/// `Pending`) returns [`RvError::Unimplemented`].
+#[derive(Debug, Clone)]
+pub(crate) struct MqttBackend {
+    /// Broker URL; consumed by the Todo 7 implementation.
+    #[allow(dead_code)] // read once the broker connection lands (Todo 7).
+    base: String,
+}
+
+impl MqttBackend {
+    fn new(base: &str) -> Self {
+        Self {
+            base: base.to_string(),
+        }
+    }
+
+    /// Placeholder until Todo 7: allocate against the broker.
+    async fn allocate(&self, _ticket: &str) -> Result<Allocation, RvError> {
+        Err(RvError::Unimplemented {
+            detail: "MQTT allocate (Todo 7)".to_string(),
+        })
+    }
+
+    /// Placeholder until Todo 7: publish the pairing code to the broker.
+    async fn publish(&self, _ticket: &str, _nameplate: u32, _words: &str) -> Result<(), RvError> {
+        Err(RvError::Unimplemented {
+            detail: "MQTT publish (Todo 7)".to_string(),
+        })
+    }
+
+    /// Placeholder until Todo 7: claim the pairing code from the broker.
+    async fn claim(&self, _nameplate: u32, _words: &str) -> Result<String, RvError> {
+        Err(RvError::Unimplemented {
+            detail: "MQTT claim (Todo 7)".to_string(),
+        })
+    }
+
+    /// Placeholder until Todo 7: clean up broker state.
+    async fn cleanup(&self, _nameplate: u32, _words: &str) -> Result<(), RvError> {
+        Err(RvError::Unimplemented {
+            detail: "MQTT cleanup (Todo 7)".to_string(),
+        })
+    }
+
+    /// A nameplate on the broker is "not claimed yet" until a claim lands
+    /// (Todo 7 implements the real poll).
+    async fn status(&self, _nameplate: u32) -> Result<PairState, RvError> {
+        Ok(PairState::Pending)
+    }
+
+    /// Placeholder until Todo 7: broker health check.
+    async fn health(&self) -> Result<(), RvError> {
+        Err(RvError::Unimplemented {
+            detail: "MQTT health (Todo 7)".to_string(),
+        })
     }
 }
 

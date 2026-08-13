@@ -520,7 +520,7 @@ async fn drive_claim(
     emit(events, BridgeEvent::phase("pending_pair"));
 
     let (nameplate, words) = WordCode::split(code).map_err(|err| err.to_string())?;
-    let ticket_str = rv.claim(nameplate).await.map_err(|err| err.to_string())?;
+    let ticket_str = rv.claim(nameplate, &words).await.map_err(|err| err.to_string())?;
     let ticket = iroh_blobs::ticket::BlobTicket::from_str(&ticket_str)
         .map_err(|_| "invalid ticket from rendezvous".to_string())?;
 

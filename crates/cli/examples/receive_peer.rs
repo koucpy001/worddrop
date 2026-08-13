@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("nameplate = {nameplate}, words = {words}");
 
     let rv = RvClient::new(&rendezvous_url);
-    let ticket_str = timeout(Duration::from_secs(15), rv.claim(nameplate)).await??;
+    let ticket_str = timeout(Duration::from_secs(15), rv.claim(nameplate, &words)).await??;
     let ticket = BlobTicket::from_str(&ticket_str)?;
     println!("claimed ticket: {ticket_str}");
 

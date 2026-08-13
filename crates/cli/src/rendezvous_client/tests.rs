@@ -8,7 +8,12 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
-use super::{Allocation, PairState, RvClient};
+use super::{Allocation, HttpBackend, PairState, RvClient};
+
+/// The contract `words` argument: exactly `WordCode::password()`, the three
+/// hyphen-joined secret words — never the `[String; 3]` array. The HTTP
+/// backend ignores it, so tests pass the canonical shape.
+const WORDS: &str = "correct-horse-battery";
 
 /// A canned HTTP response: status line + optional JSON body.
 struct Response {
@@ -132,7 +137,7 @@ async fn claim_parses_ticket() {
     .await;
     let client = RvClient::new(&url);
 
-    let ticket = client.claim(7).await.expect("claim succeeds");
+    let ticket = client.claim(7, WORDS).await.expect("claim succeeds");
     assert_eq!(ticket, "blob-ticket-value");
 }
 
@@ -145,7 +150,10 @@ async fn claim_second_claim_maps_to_http_404() {
     .await;
     let client = RvClient::new(&url);
 
-    let err = client.claim(7).await.expect_err("claimed pair is 404");
+    let err = client
+        .claim(7, WORDS)
+        .await
+        .expect_err("claimed pair is 404");
     let message = err.to_string();
     assert!(message.contains("HTTP 404"), "status surfaced: {message}");
     assert!(
@@ -163,7 +171,10 @@ async fn claim_expired_maps_to_http_410() {
     .await;
     let client = RvClient::new(&url);
 
-    let err = client.claim(7).await.expect_err("expired pair is 410");
+    let err = client
+        .claim(7, WORDS)
+        .await
+        .expect_err("expired pair is 410");
     assert!(err.to_string().contains("HTTP 410"));
 }
 
@@ -248,8 +259,8 @@ async fn malformed_response_is_parse_error() {
 
 #[test]
 fn endpoint_https_defaults_to_port_443() {
-    let client = RvClient::new("https://pair.worddrop.cloud");
-    let (hostname, port, host, use_tls) = client.endpoint().expect("parse");
+    let backend = HttpBackend::new("https://pair.worddrop.cloud");
+    let (hostname, port, host, use_tls) = backend.endpoint().expect("parse");
     assert_eq!(hostname, "pair.worddrop.cloud");
     assert_eq!(port, 443);
     assert_eq!(host, "pair.worddrop.cloud");
@@ -258,8 +269,8 @@ fn endpoint_https_defaults_to_port_443() {
 
 #[test]
 fn endpoint_http_keeps_explicit_port_in_host_header() {
-    let client = RvClient::new("http://127.0.0.1:8080");
-    let (hostname, port, host, use_tls) = client.endpoint().expect("parse");
+    let backend = HttpBackend::new("http://127.0.0.1:8080");
+    let (hostname, port, host, use_tls) = backend.endpoint().expect("parse");
     assert_eq!(hostname, "127.0.0.1");
     assert_eq!(port, 8080);
     assert_eq!(host, "127.0.0.1:8080");
@@ -268,19 +279,31 @@ fn endpoint_http_keeps_explicit_port_in_host_header() {
 
 #[test]
 fn endpoint_https_explicit_port() {
-    let client = RvClient::new("https://relay.example.test:8443");
-    let (hostname, port, host, use_tls) = client.endpoint().expect("parse");
+    let backend = HttpBackend::new("https://relay.example.test:8443");
+    let (hostname, port, host, use_tls) = backend.endpoint().expect("parse");
     assert_eq!(hostname, "relay.example.test");
     assert_eq!(port, 8443);
     assert_eq!(host, "relay.example.test:8443");
     assert!(use_tls);
 }
 
-#[test]
-fn endpoint_rejects_unsupported_scheme() {
-    let client = RvClient::new("ftp://example.test");
-    let err = client.endpoint().expect_err("ftp rejected");
-    assert!(matches!(err, super::RvError::BadUrl { .. }));
+/// `new` is infallible: an unusable scheme is captured, not rejected, and
+/// only surfaces as `BadUrl` on the first method call.
+#[tokio::test]
+async fn new_with_unsupported_scheme_defers_bad_url_to_call() {
+    let client = RvClient::new("ftp://x");
+    assert!(
+        matches!(&client.backend, super::Backend::Invalid(_)),
+        "ftp dispatches to Invalid"
+    );
+    let err = client
+        .allocate("ticket")
+        .await
+        .expect_err("ftp rejected on call");
+    assert!(
+        matches!(err, super::RvError::BadUrl { .. }),
+        "deferred BadUrl: {err}"
+    );
     assert!(
         err.to_string().contains("unsupported scheme"),
         "reason surfaced: {err}"
@@ -289,7 +312,49 @@ fn endpoint_rejects_unsupported_scheme() {
 
 #[test]
 fn endpoint_rejects_missing_host() {
-    let client = RvClient::new("https://");
-    let err = client.endpoint().expect_err("no host rejected");
+    let backend = HttpBackend::new("https://");
+    let err = backend.endpoint().expect_err("no host rejected");
     assert!(matches!(err, super::RvError::BadUrl { .. }));
+}
+
+/// `mqtt`/`mqtts` dispatch to the MQTT backend; the scheme itself never
+/// errors — only the Todo 7 placeholder answers `Unimplemented`.
+#[tokio::test]
+async fn mqtt_scheme_dispatches_without_scheme_error() {
+    for base in ["mqtt://broker.local:1883", "mqtts://broker.emqx.io:8883"] {
+        let client = RvClient::new(base);
+        assert!(
+            matches!(&client.backend, super::Backend::Mqtt(_)),
+            "{base} must build the MQTT backend"
+        );
+        let err = client
+            .allocate("ticket")
+            .await
+            .expect_err("mqtt placeholder not implemented yet");
+        assert!(
+            !matches!(err, super::RvError::BadUrl { .. }),
+            "{base}: the scheme must not be the failure"
+        );
+        assert!(
+            matches!(err, super::RvError::Unimplemented { .. }),
+            "{base}: placeholder error expected, got {err}"
+        );
+        // status is the one MQTT operation with a defined placeholder answer.
+        assert_eq!(
+            client.status(7).await.expect("mqtt status pending"),
+            PairState::Pending
+        );
+    }
+}
+
+/// publish/cleanup are HTTP no-ops: `Ok(())` with no network traffic (the
+/// port-1 origin cannot be connected to, proving nothing is sent).
+#[tokio::test]
+async fn http_publish_and_cleanup_are_noops() {
+    let client = RvClient::new("http://127.0.0.1:1");
+    client
+        .publish("ticket-abc", 7, WORDS)
+        .await
+        .expect("publish is a no-op");
+    client.cleanup(7, WORDS).await.expect("cleanup is a no-op");
 }
