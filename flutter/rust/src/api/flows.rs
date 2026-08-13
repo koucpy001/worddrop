@@ -46,7 +46,7 @@ pub(super) async fn run_sender_flow(
     let first = match cmds.recv().await {
         Some(cmd) => cmd,
         None => {
-            let _ = engine.shutdown().await;
+            finish_sender_flow(engine, &rv, None).await;
             return;
         }
     };
@@ -56,12 +56,12 @@ pub(super) async fn run_sender_flow(
         // anything was prepared).
         SessionCommand::Cancel { reply } => {
             cancel_flow(&session, &events, &stage, Some(reply)).await;
-            let _ = engine.shutdown().await;
+            finish_sender_flow(engine, &rv, None).await;
             return;
         }
         other => {
             reject_other(other, "send_paths must be the first call on a sender session");
-            let _ = engine.shutdown().await;
+            finish_sender_flow(engine, &rv, None).await;
             return;
         }
     };
@@ -72,7 +72,7 @@ pub(super) async fn run_sender_flow(
             *stage.lock().unwrap() = Stage::Idle; // retryable
             emit(&events, BridgeEvent::error(&err));
             let _ = reply.send(Err(err));
-            let _ = engine.shutdown().await;
+            finish_sender_flow(engine, &rv, None).await;
             return;
         }
     };
@@ -93,7 +93,7 @@ pub(super) async fn run_sender_flow(
     let conn = match wait_for_receiver(&mut cmds, &mut control_rx, &session, &stage, &events).await {
         Some(conn) => conn,
         None => {
-            let _ = engine.shutdown().await;
+            finish_sender_flow(engine, &rv, Some(&code)).await;
             return;
         }
     };
@@ -102,7 +102,7 @@ pub(super) async fn run_sender_flow(
         Err(err) => {
             emit(&events, BridgeEvent::error(err));
             finish_failed(&session, &stage, &events).await;
-            let _ = engine.shutdown().await;
+            finish_sender_flow(engine, &rv, Some(&code)).await;
             return;
         }
     };
@@ -119,13 +119,13 @@ pub(super) async fn run_sender_flow(
     if let Err(err) = paired {
         emit(&events, BridgeEvent::error(err));
         finish_failed(&session, &stage, &events).await;
-        let _ = engine.shutdown().await;
+        finish_sender_flow(engine, &rv, Some(&code)).await;
         return;
     }
     if let Err(err) = session.transition(Transition::PairConfirmed).await {
         emit(&events, BridgeEvent::error(err.to_string()));
         finish_failed(&session, &stage, &events).await;
-        let _ = engine.shutdown().await;
+        finish_sender_flow(engine, &rv, Some(&code)).await;
         return;
     }
     emit(&events, BridgeEvent::phase("paired"));
@@ -146,14 +146,14 @@ pub(super) async fn run_sender_flow(
     if let Err(err) = send_message(&mut send, &offer).await {
         emit(&events, BridgeEvent::error(err.to_string()));
         finish_failed(&session, &stage, &events).await;
-        let _ = engine.shutdown().await;
+        finish_sender_flow(engine, &rv, Some(&code)).await;
         return;
     }
 
     let response = match wait_response(&mut cmds, &mut send, &mut recv, &session, &stage, &events).await {
         Some(response) => response,
         None => {
-            let _ = engine.shutdown().await;
+            finish_sender_flow(engine, &rv, Some(&code)).await;
             return;
         }
     };
@@ -162,7 +162,7 @@ pub(super) async fn run_sender_flow(
             if let Err(err) = session.transition(Transition::TransferStarted).await {
                 emit(&events, BridgeEvent::error(err.to_string()));
                 finish_failed(&session, &stage, &events).await;
-                let _ = engine.shutdown().await;
+                finish_sender_flow(engine, &rv, Some(&code)).await;
                 return;
             }
             emit(&events, BridgeEvent::phase("transferring"));
@@ -179,23 +179,34 @@ pub(super) async fn run_sender_flow(
                 file_count,
             )
             .await;
-            let _ = engine.shutdown().await;
+            finish_sender_flow(engine, &rv, Some(&code)).await;
         }
         ControlMessage::Decline { reason } => {
             emit(&events, BridgeEvent::info(format!("declined: {reason}")));
             *stage.lock().unwrap() = Stage::Terminal;
-            let _ = engine.shutdown().await;
+            finish_sender_flow(engine, &rv, Some(&code)).await;
         }
         ControlMessage::Cancel => {
             cancel_flow(&session, &events, &stage, None).await;
-            let _ = engine.shutdown().await;
+            finish_sender_flow(engine, &rv, Some(&code)).await;
         }
         other => {
             emit(&events, BridgeEvent::error(format!("unexpected control message: {other:?}")));
             finish_failed(&session, &stage, &events).await;
-            let _ = engine.shutdown().await;
+            finish_sender_flow(engine, &rv, Some(&code)).await;
         }
     }
+}
+
+/// Best-effort release of the published pairing, then shut the engine down.
+/// Every exit path of [`run_sender_flow`] funnels through here: MQTT mode
+/// clears the retained ticket; HTTP mode is a no-op. `code` is `None` when
+/// the flow ended before a pairing was published.
+async fn finish_sender_flow(engine: TransferEngine, rv: &RvClient, code: Option<&WordCode>) {
+    if let Some(code) = code {
+        let _ = rv.cleanup(code.nameplate(), &code.password()).await;
+    }
+    let _ = engine.shutdown().await;
 }
 
 /// Sender prepare: walk + import + collection + ticket, then rendezvous
@@ -221,6 +232,9 @@ async fn drive_prepare(
         .map_err(|err| err.to_string())?;
     let allocation = rv.allocate(&prepared.ticket.to_string()).await.map_err(|err| err.to_string())?;
     let code = WordCode::generate(allocation.nameplate, &mut rand::rng())
+        .map_err(|err| err.to_string())?;
+    rv.publish(&prepared.ticket.to_string(), allocation.nameplate, &code.password())
+        .await
         .map_err(|err| err.to_string())?;
     Ok((prepared, code))
 }

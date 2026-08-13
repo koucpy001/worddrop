@@ -47,6 +47,8 @@ pub enum SendError {
     Prepare(worddrop_core::transfer::send::SendError),
     /// Rendezvous allocate failed.
     Rv(RvError),
+    /// Publishing the pairing info failed (MQTT mode; HTTP no-op).
+    Publish(RvError),
     /// Word-code generation failed.
     Word(WordCodeError),
     /// Pairing control exchange failed.
@@ -79,6 +81,10 @@ impl fmt::Display for SendError {
         match self {
             Self::Prepare(err) => write!(f, "{err}"),
             Self::Rv(err) => write!(f, "服务器错误 / rendezvous error: {err}"),
+            Self::Publish(err) => write!(
+                f,
+                "无法发布配对信息 / failed to publish pairing info: {err}"
+            ),
             Self::Word(err) => write!(f, "配对码生成失败 / word-code error: {err}"),
             Self::Pair(err) => write!(f, "配对失败 / pairing error: {err}"),
             Self::Control(err) => write!(f, "控制通道错误 / control error: {err}"),
@@ -116,6 +122,7 @@ impl std::error::Error for SendError {
         match self {
             Self::Prepare(err) => Some(err),
             Self::Rv(err) => Some(err),
+            Self::Publish(err) => Some(err),
             Self::Word(err) => Some(err),
             Self::Pair(err) => Some(err),
             Self::Control(err) => Some(err),
@@ -167,7 +174,9 @@ impl From<iroh::endpoint::ConnectionError> for SendError {
 
 /// Run the whole sender flow. The engine is consumed: its router serves blob
 /// requests while the flow drives the control stream; it is shut down on
-/// every exit path.
+/// every exit path. The published pairing (if any) is best-effort released
+/// on every exit path before shutdown (MQTT mode clears the retained ticket;
+/// HTTP mode is a no-op).
 ///
 /// `interrupt` resolves on local Ctrl+C and is re-polled at every wait point
 /// (after firing once it stays resolved, so the flow unwinds promptly).
@@ -187,6 +196,7 @@ where
     I: Future<Output = ()> + Unpin,
 {
     let mut interrupt = interrupt;
+    let mut pairing: Option<(u32, String)> = None;
     let outcome = run_send_inner(
         &engine,
         control_rx,
@@ -195,12 +205,17 @@ where
         &ui,
         &mut interrupt,
         code_tx,
+        &mut pairing,
     )
     .await;
+    if let Some((nameplate, words)) = pairing {
+        let _ = rv.cleanup(nameplate, &words).await;
+    }
     let _ = engine.shutdown().await;
     outcome
 }
 
+#[allow(clippy::too_many_arguments)] // 8th arg: pairing out-param for best-effort cleanup in run_send
 async fn run_send_inner<I>(
     engine: &TransferEngine,
     mut control_rx: mpsc::UnboundedReceiver<Connection>,
@@ -209,6 +224,7 @@ async fn run_send_inner<I>(
     ui: &SendUi,
     interrupt: &mut I,
     code_tx: Option<mpsc::Sender<String>>,
+    pairing: &mut Option<(u32, String)>,
 ) -> Result<SendOutcome, SendError>
 where
     I: Future<Output = ()> + Unpin,
@@ -230,6 +246,11 @@ where
     // 3. Generate the code; the words stay local (SPAKE2 password only).
     let code = WordCode::generate(allocation.nameplate, &mut rand::rng())?;
     let words = code.password().to_owned();
+    // Publish the pairing (MQTT mode: KDF topic + retained ticket; HTTP no-op).
+    rv.publish(&prepared.ticket.to_string(), allocation.nameplate, &words)
+        .await
+        .map_err(SendError::Publish)?;
+    *pairing = Some((allocation.nameplate, words.clone()));
     if let Some(code_tx) = code_tx {
         let _ = code_tx.send(code.to_string()).await;
     }
