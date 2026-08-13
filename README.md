@@ -23,6 +23,9 @@
 
 - **v0.2.2 已发布**：[GitHub Releases](https://github.com/koucpy001/worddrop/releases/tag/v0.2.2)，
   提供 Linux / Windows / macOS 与 Android 的预编译产物（见[下载](#download-下载)）。
+- **v0.2.3 默认零部署**：开箱即用，默认接入公共基础设施——iroh 公共 relay + EMQX
+  公共配对信箱（MQTT），无需注册、无需自建服务、无需任何配置即可互传；需要自建
+  时见[部署](#deployment-部署)与[默认 vs 自建](#默认-vs-自建)。
 - **仓库公开**：[github.com/koucpy001/worddrop](https://github.com/koucpy001/worddrop)，
   CI 三平台（Linux / Windows / macOS）构建与测试全部通过。
 - **Android 已签名**：release APK 使用正式密钥签名（CN=WordDrop），可直接安装。
@@ -121,14 +124,15 @@ worddrop receive --code 7-correct-horse-battery --output ~/Downloads
 
 ### 配置（服务地址）
 
-客户端通过 `rendezvous_url` / `relay_url` 找到配对信箱和中继。**这两个地址必须指向
-"跑着服务的那台机器"**，按场景分三种：
+客户端通过 `rendezvous_url` / `relay_url` 找到配对信箱和中继。v0.2.3 起**默认即公共
+基础设施，无需本机服务、无需任何配置**；只有自建服务（局域网 / 公网）时才需要把
+这两个地址指向"跑着服务的那台机器"：
 
 | 场景 | rendezvous / relay 填什么 | 说明 |
 | :--- | :--- | :--- |
-| 本机自测（开箱默认） | `127.0.0.1:8080` / `127.0.0.1:3340` | 服务与客户端同机 |
-| 局域网互传 | `http://<服务机IP>:8080` / `:3340` | 其他设备填服务机 IP |
-| 公网互传 | `https://pair.你的域名` / `https://relay.你的域名` | 服务部署在公网 VPS（见[部署](#deployment-部署)） |
+| 默认（开箱即用） | 无需填写 | 公共配对信箱（EMQX MQTT）+ iroh 公共 relay，见[默认 vs 自建](#默认-vs-自建) |
+| 局域网自建 | `http://<服务机IP>:8080` / `:3340` | 其他设备填服务机 IP |
+| 公网自建 | `https://pair.你的域名` / `https://relay.你的域名` | 服务部署在公网 VPS（见[部署](#deployment-部署)） |
 
 > ⚠️ **不要在局域网/公网场景填 `127.0.0.1`**：它指"本机自己"。手机填 `127.0.0.1`
 > 指的是手机自己——那里没有跑服务。必须填跑服务那台机器的局域网 IP 或公网域名。
@@ -148,13 +152,14 @@ worddrop config get
 
 | 配置项 | 环境变量 | 默认值 |
 | :--- | :--- | :--- |
-| rendezvous URL | `WORDDROP_RENDEZVOUS_URL` | `http://127.0.0.1:8080` |
-| relay URL | `WORDDROP_RELAY_URL` | `http://127.0.0.1:3340` |
+| rendezvous URL | `WORDDROP_RENDEZVOUS_URL` | `mqtts://broker.emqx.io:8883`（EMQX 公共配对信箱） |
+| relay URL | `WORDDROP_RELAY_URL` | `public`（iroh 公共 relay） |
 | 数据目录 | `WORDDROP_DATA_DIR` | 平台默认配置目录（按 send/receive 角色分子目录） |
 | 配置目录 | `WORDDROP_CONFIG_DIR` | 平台默认配置目录 |
 
-`pair.worddrop.cloud` 与 `relay.worddrop.cloud` 是项目自托管的公共演示服务（见
-[部署](#deployment-部署)）。GUI 在设置页填写同样的地址，与 CLI 共用一份配置。
+`pair.worddrop.cloud` 与 `relay.worddrop.cloud` 是项目自建示例服务的域名（部署文档
+以其为例，见[部署](#deployment-部署)）；需要更快的速度或更强的安全保证时，按
+[默认 vs 自建](#默认-vs-自建)自建。GUI 在设置页填写同样的地址，与 CLI 共用一份配置。
 
 ### GUI（Flutter）
 
@@ -167,7 +172,8 @@ GUI 与 CLI 共享同一核心（crates/core，经 FRB bridge 调用），界面
 - **设置**：服务地址、覆盖策略等。
 
 支持平台：Linux desktop、Android。注意：Android 设备上的服务地址不能写
-`127.0.0.1`，须填服务端的局域网 IP 或公网地址。
+`127.0.0.1`，须填服务端的局域网 IP 或公网地址（默认公共基础设施下无需填写，
+此限制仅在自建时生效）。
 
 ## Architecture (架构)
 
@@ -229,7 +235,9 @@ sequenceDiagram
 ```
 
 关键点：**nameplate 与 words 分离**。rendezvous 只见数字 nameplate（挂号用），
-words（真正的密码）只存在于两端客户端之间、经 SPAKE2 协商，永不经过 rendezvous。
+words（真正的密码）只存在于两端客户端之间、经 SPAKE2 协商，永不经过 rendezvous
+（上述为自建 HTTP rendezvous 的架构；默认公共 MQTT 模式向 broker 暴露的是
+nameplate+words 的慢 KDF 承诺，见安全模型「公共信箱（MQTT）模式」）。
 
 ## Security model (安全模型)
 
@@ -253,6 +261,8 @@ words（真正的密码）只存在于两端客户端之间、经 SPAKE2 协商�
 
 这个拆分是安全模型的根基：即使 rendezvous 被攻破，攻击者拿到的也只是
 「有人用号码 7 挂号了」这类信息，**得不到任何能冒充发送方或解密传输的东西**。
+（以上为自建 HTTP rendezvous 的保证；默认公共 MQTT 模式经公共 broker 暴露的是
+nameplate+words 的慢 KDF 承诺，性质不同，见下文「公共信箱（MQTT）模式」小节。）
 
 ### 2. SPAKE2 配对认证
 
@@ -277,7 +287,8 @@ words（真正的密码）只存在于两端客户端之间、经 SPAKE2 协商�
 - **恶意/被攻破的 rendezvous**：它可以**替换 ticket**，把接收方引导到攻击者自己
   的节点。但攻击者拿不到三个单词，就无法通过 key confirmation，接收方会在配对
   阶段发现（确认失败），不会传输任何文件。**这就是 SPAKE2 的意义**：它把
-  「信箱管理员不可信」变成了「信箱管理员捣乱也没用」。
+  「信箱管理员不可信」变成了「信箱管理员捣乱也没用」。（此保证针对自建 HTTP
+  rendezvous；默认公共 MQTT 模式不提供同等保证，见下文「公共信箱（MQTT）模式」。）
 - **恶意/被攻破的 relay**：oblivious（视而不见）。它只能转发密文，没有解密密钥。
   即使 relay 与 rendezvous 串通，也只能做 ticket 替换级别的干扰，依然过不了
   SPAKE2 配对关。
@@ -285,7 +296,7 @@ words（真正的密码）只存在于两端客户端之间、经 SPAKE2 协商�
   看到的是密文；即使看到 nameplate/ticket 明文（dev 模式），也没有任何秘密可言。
 - **重放攻击**：nameplate 一次性 claim，claim 后立即作废（one-shot），重复 claim
   返回 404；TTL 600s 过期即失效。
-- **离线暴力破解**：256 词词表取 3 个不同单词，组合空间 256×255×254 ≈ 1.66×10⁷。
+- **离线暴力破解（自建 HTTP 模式）**：256 词词表取 3 个不同单词，组合空间 256×255×254 ≈ 1.66×10⁷。
   数字不大，但 SPAKE2 的 key confirmation 使每次猜测都需要一次实时握手（不能离线
   批量验证），且 rendezvous 有速率限制、配对码 600s 过期，对在线猜测的防护足够。
 
@@ -296,6 +307,30 @@ words（真正的密码）只存在于两端客户端之间、经 SPAKE2 协商�
 2. dev 模式（relay `--dev` + 无 TLS rendezvous）下 nameplate/ticket 明文传输，
    局域网嗅探者能看到谁在跟谁配对（看不到内容）。生产必须 TLS。
 3. 身份密钥（ed25519）保存在本地；丢 key 不会丢文件，但会换身份。
+
+### 公共信箱（MQTT）模式
+
+v0.2.3 起默认配对信箱是 **EMQX 公共 broker（MQTT）**（`mqtts://broker.emqx.io:8883`），
+与自建 HTTP rendezvous 的安全性质不同。以下逐条如实声明：
+
+- **(a) 配对 topic 的派生与暴力空间**：配对 topic 由「nameplate+words」经
+  **Argon2id（memory-hard KDF）**派生，nameplate 折进密码，暴力空间
+  9999×256×255×254 ≈ 1.66×10¹¹（约 263 CPU-years 的成本）；words 本身熵约
+  24-bit。即使使用慢 KDF，也**无法从数学上消除离线暴力**，只是把成本抬高到
+  不可行。这与 HTTP 模式「words 绝不离开客户端」的保证不同：**MQTT 模式向
+  公共 broker 暴露了（nameplate+words）的慢 KDF 承诺**。
+- **(b) 通配订阅批量收集**：公共 broker 上任何人可 `worddrop/v1/#` 通配订阅，
+  批量获取全部 retained ticket 与 topic 哈希（HTTP 模式则按 nameplate 限速
+  claim）。ticket 没有 words 无法通过 SPAKE2 配对，但 endpoint 元数据可被
+  批量收集（谁在什么时间从什么地址配对）。
+- **(c) retained 无服务端 TTL 保证**：ticket 在 claim/清理后被空消息删除，但
+  公共 broker 没有服务端 TTL 保证；若发送方异常退出且未清理，ticket 可能存留。
+  客户端退出路径的 best-effort 清理已降低该风险，但无法完全消除。
+- **(d) 强保证需自建 HTTP rendezvous**：需要「信箱管理员捣乱也没用」级强保证的
+  用户，应自建 HTTP rendezvous（方案 A/B）——**默认公共 MQTT 模式不提供同等保证**。
+
+> 结论：默认公共 MQTT 模式适合日常零配置体验；敏感场景请自建 HTTP rendezvous，
+> 顺带获得满速与（大陆）备案后的稳定访问。
 
 ## Deployment (部署)
 
@@ -308,9 +343,22 @@ WordDrop 是 P2P 传输工具，**两个服务都不在传输链路上**，它�
 
 | 场景 | 需要部署吗 | 怎么传 |
 | :--- | :--- | :--- |
-| 本机自测（默认配置） | ❌ 不需要 | 默认就指向 `127.0.0.1` |
+| 默认（开箱即用） | ❌ 不需要 | 公共配对信箱（EMQX MQTT）+ iroh 公共 relay，见[默认 vs 自建](#默认-vs-自建) |
 | 同一局域网 | ⚠️ 一台设备跑服务 | 直连打洞即可，服务只需 rendezvous（relay 基本闲置） |
 | 跨公网 / NAT | ✅ 需要 | 打洞优先，失败走 relay |
+
+### 默认 vs 自建
+
+| 对比项 | 默认（开箱即用） | 自建（方案 A/B） |
+| :--- | :--- | :--- |
+| 配对信箱 | EMQX 公共 broker（`mqtts://broker.emqx.io:8883`） | `https://pair.你的域名` |
+| 中继 | iroh 公共 relay（`public`） | `https://relay.你的域名` |
+| 配置 | 无需任何配置 | 两端 `worddrop config set` 指向自己的域名 |
+| 速度 / 稳定性 | 公共资源：**可能限速、无 SLA** | **满速**，自己掌控 |
+| 安全保证 | 公共 MQTT 模式（见安全模型「公共信箱（MQTT）模式」） | 自建 HTTP rendezvous，提供完整保证 |
+| 大陆访问 | 无需备案（公共设施在海外） | 自建服务器在大陆时**域名需 ICP 备案**，否则大陆 80/443 被拦截（见 [`deploy/ICP-filing.md`](deploy/ICP-filing.md)） |
+
+> 一句话：默认零部署，开箱即用；要满速、要「信箱管理员捣乱也没用」的强保证，就自建。
 
 ### 服务器二进制从哪来？
 
@@ -361,6 +409,9 @@ worddrop config set relay_url http://192.168.1.100:3340
 - 一台有公网 IP 的 VPS（最低 1 核 512M 即可，整套 <20 MiB 内存）
 - 一个域名，解析两个子域到 VPS（如 `pair.example.com`、`relay.example.com`）
 - 防火墙放行 **80/443 TCP**（Caddy 负责 TLS；**不需要开任何 UDP 端口**）
+- **ICP 备案**：VPS 在大陆（如腾讯云）时，未备案域名的大陆 80/443 流量会被拦截
+  （实测：80→302 提示页、443→RST），必须先完成 ICP 备案，材料清单与流程见
+  [`deploy/ICP-filing.md`](deploy/ICP-filing.md)
 
 ```sh
 # 1. 拉取仓库到 VPS
@@ -391,16 +442,20 @@ worddrop config set relay_url https://relay.example.com
 把 `pair` 反代到 rendezvous :8080、`relay`（含 WebSocket /relay）反代到 relay :80。
 证书持久化在 `caddy-data` 卷，重建容器不丢。详见 [`deploy/README.md`](deploy/README.md)。
 
-### 方案 C：直接使用公共服务（零部署）
+### 方案 C：默认即公共基础设施（零部署、零配置）
 
-项目维护的公共演示服务可直接用于体验或日常使用，两端设置：
+v0.2.3 起**默认即为公共基础设施**：配对信箱走 EMQX 公共 broker（MQTT），中继走
+iroh 公共 relay。**无需任何配置**，开箱即用：
 
 ```sh
-worddrop config set rendezvous_url https://pair.worddrop.cloud
-worddrop config set relay_url https://relay.worddrop.cloud
+worddrop send ~/photos/vacation/
+worddrop receive
 ```
 
-> ⚠️ 公共服务按"演示"标准运维（无 SLA、可能限速）。正式使用建议自托管（方案 A/B）。
+> ⚠️ 公共资源按"尽力而为"运维（无 SLA、可能限速），且默认公共 MQTT 模式的安全
+> 保证弱于自建 HTTP rendezvous（见安全模型「公共信箱（MQTT）模式」）。正式或敏感
+> 使用建议自建（方案 A/B）；`pair.worddrop.cloud` / `relay.worddrop.cloud` 仅作
+> 自建示例域名出现（部署示例见 [`deploy/README.md`](deploy/README.md)）。
 
 ### 运维要点
 
