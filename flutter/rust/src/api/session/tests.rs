@@ -203,10 +203,10 @@ fn double_dispose_or_unknown_handle_fails() {
 
 #[test]
 fn relay_mode_parsing() {
-    assert!(matches!(relay_mode_from_url("disabled").unwrap(), RelayMode::Disabled));
-    assert!(matches!(relay_mode_from_url("OFF").unwrap(), RelayMode::Disabled));
-    assert!(matches!(relay_mode_from_url("http://127.0.0.1:3340").unwrap(), RelayMode::Custom(_)));
-    assert!(relay_mode_from_url("not a url").is_err());
+    assert!(matches!(worddrop_cli::relay_mode_from_url("disabled").unwrap(), RelayMode::Disabled));
+    assert!(matches!(worddrop_cli::relay_mode_from_url("OFF").unwrap(), RelayMode::Disabled));
+    assert!(matches!(worddrop_cli::relay_mode_from_url("http://127.0.0.1:3340").unwrap(), RelayMode::Custom(_)));
+    assert!(worddrop_cli::relay_mode_from_url("not a url").is_err());
 }
 
 #[test]

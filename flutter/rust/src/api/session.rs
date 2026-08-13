@@ -7,7 +7,6 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, LazyLock};
 use std::time::Duration;
@@ -236,18 +235,6 @@ fn lookup(handle: SessionHandle) -> Result<Arc<SessionState>, String> {
         .ok_or_else(|| "unknown session handle".to_string())
 }
 
-/// The relay URL "disabled"/"off"/"none" turns the relay off (loopback
-/// direct) — the escape hatch the headless smoke test uses.
-fn relay_mode_from_url(url: &str) -> Result<RelayMode, String> {
-    if matches!(url.to_ascii_lowercase().as_str(), "disabled" | "off" | "none") {
-        Ok(RelayMode::Disabled)
-    } else {
-        let relay = iroh::RelayUrl::from_str(url)
-            .map_err(|err| format!("invalid relay URL {url:?}: {err}"))?;
-        Ok(RelayMode::Custom(relay.into()))
-    }
-}
-
 /// Per-role engine data dir under the config base (mirrors the CLI: the redb
 /// blob store is single-process-exclusive, so two roles on one machine must
 /// never share a db — D3 lesson).
@@ -261,7 +248,7 @@ fn role_data_dir(base: &Path, role: SessionRole) -> PathBuf {
 async fn build_session(role: SessionRole) -> Result<Arc<SessionState>, String> {
     crate::api::config::ensure_android_config_dir();
     let cfg = Config::load().map_err(|err| err.to_string())?;
-    let relay_mode = relay_mode_from_url(&cfg.relay_url)?;
+    let relay_mode = worddrop_cli::relay_mode_from_url(&cfg.relay_url)?;
     let (events, _) = broadcast::channel(128);
     let (cmds, cmds_rx) = mpsc::unbounded_channel();
     let session = Arc::new(Session::new());
