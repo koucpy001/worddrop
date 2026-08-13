@@ -9,6 +9,7 @@ pub mod config;
 pub mod error;
 pub mod receive;
 pub mod relay;
+pub use relay::relay_mode_from_url;
 pub mod rendezvous_client;
 pub mod send;
 pub mod ui;
