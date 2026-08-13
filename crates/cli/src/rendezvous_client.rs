@@ -2,8 +2,9 @@
 //!
 //! [`RvClient`] picks its transport backend from the base URL's scheme at
 //! construction time: `http`/`https` → [`HttpBackend`] (the HTTP/1.1 client
-//! below), `mqtt`/`mqtts` → [`MqttBackend`] (placeholder until Todo 7 fills
-//! in the rumqttc implementation). Any other scheme is captured as
+//! below), `mqtt`/`mqtts` → [`MqttBackend`] (the rumqttc broker client:
+//! Argon2id-derived mailbox topics carrying one-shot retained tickets). Any
+//! other scheme is captured as
 //! [`Backend::Invalid`] and only surfaces as [`RvError::BadUrl`] on the
 //! first method call — so [`RvClient::new`] stays infallible and no caller
 //! needs a `Result`.
@@ -25,15 +26,20 @@
 //! SECURITY (F1): on the HTTP path only the ticket goes to the server on
 //! `allocate`; the word-code secret words never leave the client — the HTTP
 //! backend ignores the `words` argument of `claim`/`publish`/`cleanup`. The
-//! MQTT backend (Todo 7) is the only place that may use `words` (the broker
-//! exchange needs the pairing secret).
+//! MQTT backend is the only place that may use `words`: the pair code is
+//! folded into the mailbox topic via Argon2id (see [`MqttBackend`]) — the
+//! broker exchange needs the pairing secret, at the cost documented in the
+//! README「公共信箱（MQTT）模式」threat-model section.
 
 use std::{
     fmt, io,
     sync::{Arc, OnceLock},
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use argon2::Argon2;
+use rand::Rng;
+use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Outgoing, Packet, QoS, Transport};
 use rustls::pki_types::ServerName;
 use rustls::{ClientConfig, RootCertStore};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -90,6 +96,12 @@ pub enum RvError {
     BadUrl { url: String, reason: String },
     /// TLS handshake or certificate verification failed (https origin).
     Tls { detail: String },
+    /// MQTT protocol/connection failure from the broker backend (T5).
+    Mqtt { detail: String },
+    /// Client-side ticket validation failed. Mirrors the HTTP server's
+    /// ticket checks (`rendezvous` `validate_ticket`), enforced locally so a
+    /// garbage ticket fails before any network use.
+    InvalidTicket { detail: String },
     /// No response within [`REQUEST_TIMEOUT`].
     Timeout,
     /// The response body did not parse as the expected shape.
@@ -119,6 +131,10 @@ impl fmt::Display for RvError {
                 f,
                 "TLS 握手失败: {detail} / rendezvous TLS handshake failed: {detail}"
             ),
+            Self::Mqtt { detail } => write!(f, "MQTT 错误: {detail} / MQTT error: {detail}"),
+            Self::InvalidTicket { detail } => {
+                write!(f, "配对凭证无效: {detail} / invalid ticket: {detail}")
+            }
             Self::Timeout => write!(
                 f,
                 "服务器请求超时（{} 秒） / rendezvous request timed out after {}s",
@@ -146,6 +162,8 @@ impl std::error::Error for RvError {
             RvError::Http { .. }
             | RvError::BadUrl { .. }
             | RvError::Tls { .. }
+            | RvError::Mqtt { .. }
+            | RvError::InvalidTicket { .. }
             | RvError::Timeout
             | RvError::Parse { .. }
             | RvError::Unimplemented { .. } => None,
@@ -171,7 +189,7 @@ pub struct RvClient {
 enum Backend {
     /// `http`/`https` origin: the one-shot JSON API (see [`HttpBackend`]).
     Http(HttpBackend),
-    /// `mqtt`/`mqtts` broker: placeholder until Todo 7 (see [`MqttBackend`]).
+    /// `mqtt`/`mqtts` broker: the public mailbox client (see [`MqttBackend`]).
     Mqtt(MqttBackend),
     /// Anything else: reason for the deferred [`RvError::BadUrl`].
     Invalid(String),
@@ -227,7 +245,7 @@ impl RvClient {
     /// — the three hyphen-joined secret words (e.g. `"correct-horse-battery"`),
     /// NOT the `[String; 3]` array. The HTTP backend treats this as a no-op:
     /// the words never leave the client on the HTTP path (F1). The MQTT
-    /// backend publishes them per its broker protocol (Todo 7).
+    /// backend publishes them per its broker protocol ([`MqttBackend`]).
     pub async fn publish(&self, ticket: &str, nameplate: u32, words: &str) -> Result<(), RvError> {
         match &self.backend {
             Backend::Http(backend) => backend.publish(ticket, nameplate, words).await,
@@ -244,7 +262,7 @@ impl RvClient {
     /// — the three hyphen-joined secret words (e.g. `"correct-horse-battery"`),
     /// NOT the `[String; 3]` array. The HTTP backend ignores it (claim is
     /// nameplate-only on the wire, F1); the MQTT backend dispatches on it
-    /// (Todo 7).
+    /// ([`MqttBackend`]).
     pub async fn claim(&self, nameplate: u32, words: &str) -> Result<String, RvError> {
         match &self.backend {
             Backend::Http(backend) => backend.claim(nameplate, words).await,
@@ -260,7 +278,7 @@ impl RvClient {
     /// [`WordCode::password()`](worddrop_core::pairing::wordcode::WordCode::password)
     /// — the three hyphen-joined secret words (e.g. `"correct-horse-battery"`),
     /// NOT the `[String; 3]` array. The HTTP backend treats this as a no-op;
-    /// the MQTT backend cleans up its broker state (Todo 7).
+    /// the MQTT backend cleans up its broker state ([`MqttBackend`]).
     pub async fn cleanup(&self, nameplate: u32, words: &str) -> Result<(), RvError> {
         match &self.backend {
             Backend::Http(backend) => backend.cleanup(nameplate, words).await,
@@ -525,21 +543,100 @@ impl HttpBackend {
     }
 }
 
-/// MQTT broker backend (`mqtt`/`mqtts`), placeholder until Todo 7.
+/// MQTT broker backend (`mqtt`/`mqtts`): the default public mailbox
+/// (`mqtts://broker.emqx.io:8883`).
 ///
-/// The real implementation — rumqttc connect, `derive_topic(nameplate)`
-/// topic derivation, publish/claim/cleanup against the broker — lands in
-/// Todo 7 and follows the same `words` contract as [`RvClient`]: `words` is
-/// exactly
+/// Topic model (README「公共信箱（MQTT）模式」): the mailbox topic is derived
+/// from the pair code by folding BOTH the nameplate and the secret words
+/// into an Argon2id password hash — [`derive_topic`] — so a broker-side
+/// offline brute force must search the full `9999 × 256×255×254 ≈ 1.66e11`
+/// space instead of the words-only `1.66e7` (hours on a GPU farm). The
+/// 32-byte Argon2id output is hex-encoded in full (64 chars), giving the
+/// topic `worddrop/v1/{hash}`.
+///
+/// Lifecycle: [`publish`](Self::publish) stores the sender ticket as a
+/// **retained** message (the broker re-delivers it to every later
+/// subscriber); [`claim`](Self::claim) subscribes, reads the ticket and
+/// immediately clears the retained message (approximate one-shot);
+/// [`cleanup`](Self::cleanup) deletes the retained message without reading
+/// it and is idempotent. A public broker has no server-side TTL for
+/// retained messages — the `expires_at` from [`allocate`](Self::allocate)
+/// is a DISPLAY-ONLY value mirroring the HTTP server's 600 s so the CLI
+/// countdown UX matches.
+///
+/// CONTRACT: `words` is exactly
 /// [`WordCode::password()`](worddrop_core::pairing::wordcode::WordCode::password)
-/// (hyphen-joined, e.g. `"correct-horse-battery"`), never the `[String; 3]`
-/// array. Until then every operation except `status` (which reports
-/// `Pending`) returns [`RvError::Unimplemented`].
+/// — the three hyphen-joined secret words (e.g. `"correct-horse-battery"`),
+/// never the `[String; 3]` array. Topic derivation normalizes it (trim +
+/// lowercase) internally; the SPAKE2 handshake always uses the raw words
+/// (wire.rs).
 #[derive(Debug, Clone)]
 pub(crate) struct MqttBackend {
-    /// Broker URL; consumed by the Todo 7 implementation.
-    #[allow(dead_code)] // read once the broker connection lands (Todo 7).
+    /// Broker origin, e.g. `mqtts://broker.emqx.io:8883`.
     base: String,
+}
+
+/// Upper bound for one MQTT exchange (connect + publish/subscribe + write
+/// confirmation), the same 15 s as the HTTP backend's [`REQUEST_TIMEOUT`].
+const MQTT_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Upper bound for the best-effort DISCONNECT flush in [`MqttBackend::close`].
+const CLOSE_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// Fixed Argon2id salt for mailbox topic derivation. Never change: a new
+/// salt would orphan every topic published before the change.
+const TOPIC_SALT: &[u8] = b"worddrop-mailbox-v1";
+
+/// Topic prefix for all mailbox topics.
+const TOPIC_PREFIX: &str = "worddrop/v1/";
+
+/// Largest accepted ticket, mirroring `rendezvous::mailbox::MAX_TICKET_LENGTH`.
+const MAX_TICKET_LENGTH: usize = 4096;
+
+/// Display-only "TTL" reported by [`MqttBackend::allocate`], mirroring the
+/// HTTP server's 600 s TTL (`rendezvous::TTL`).
+const RENDEZVOUS_TTL_SECS: u64 = 600;
+
+/// Derive the mailbox topic for a pair code: Argon2id (OWASP defaults,
+/// `m = 19456 KiB, t = 2, p = 1`) over `"{nameplate}-{words}"` with the
+/// fixed [`TOPIC_SALT`], hex-encoded in full (32 bytes → 64 hex chars).
+///
+/// The nameplate is folded INTO the password (not used as salt): a
+/// words-only hash would collapse the brute-force space to the 24-bit word
+/// space, while folding the nameplate in gives
+/// `9999 × 256×255×254 ≈ 1.66e11`. `words` is normalized first (trim +
+/// lowercase) so `"007-CORRECT-Horse-battery"` and
+/// `"correct-horse-battery"` land on the same topic; the SPAKE2 handshake
+/// still uses the raw words.
+pub(crate) fn derive_topic(nameplate: u32, words: &str) -> String {
+    let password = format!("{nameplate}-{}", words.trim().to_lowercase());
+    let mut digest = [0u8; 32];
+    Argon2::default()
+        .hash_password_into(password.as_bytes(), TOPIC_SALT, &mut digest)
+        .expect("Argon2id over a short password cannot fail");
+    let hash: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+    format!("{TOPIC_PREFIX}{hash}")
+}
+
+/// Map a rumqttc protocol/connection error onto [`RvError::Mqtt`].
+fn rv_mqtt(err: impl fmt::Display) -> RvError {
+    RvError::Mqtt {
+        detail: err.to_string(),
+    }
+}
+
+/// Poll the event loop until `pred` matches, surfacing connection errors.
+async fn await_event(
+    eventloop: &mut EventLoop,
+    pred: impl Fn(&Event) -> bool,
+) -> Result<(), RvError> {
+    loop {
+        match eventloop.poll().await {
+            Ok(event) if pred(&event) => return Ok(()),
+            Ok(_) => continue,
+            Err(err) => return Err(rv_mqtt(err)),
+        }
+    }
 }
 
 impl MqttBackend {
@@ -549,45 +646,236 @@ impl MqttBackend {
         }
     }
 
-    /// Placeholder until Todo 7: allocate against the broker.
+    /// Resolve the broker origin into `(host, port, use_tls)`. The port
+    /// defaults per scheme (8883 for mqtts, 1883 for mqtt) so a bare
+    /// `mqtts://broker.emqx.io` works without an explicit `:8883`.
+    fn endpoint(&self) -> Result<(String, u16, bool), RvError> {
+        let url = Url::parse(&self.base).map_err(|source| RvError::BadUrl {
+            url: self.base.clone(),
+            reason: source.to_string(),
+        })?;
+        let use_tls = match url.scheme() {
+            "mqtts" => true,
+            "mqtt" => false,
+            scheme => {
+                return Err(RvError::BadUrl {
+                    url: self.base.clone(),
+                    reason: format!("unsupported scheme {scheme:?} (mqtt or mqtts only)"),
+                });
+            }
+        };
+        let hostname = url.host_str().ok_or_else(|| RvError::BadUrl {
+            url: self.base.clone(),
+            reason: "missing host".to_string(),
+        })?;
+        let port = url.port().unwrap_or(if use_tls { 8883 } else { 1883 });
+        Ok((hostname.to_string(), port, use_tls))
+    }
+
+    /// Build a fresh broker connection with a random client id (the broker
+    /// must never resume a previous session across operations).
+    ///
+    /// The rustls process default is installed once and idempotently via
+    /// `worddrop_core::transfer::engine::install_tls_provider` (a second
+    /// `install_default` would panic "crypto provider already set"); rumqttc
+    /// is built with `use-rustls-no-provider` and relies on that default.
+    async fn connect(&self) -> Result<(AsyncClient, EventLoop), RvError> {
+        worddrop_core::transfer::engine::install_tls_provider();
+        let (host, port, use_tls) = self.endpoint()?;
+        let mut options = MqttOptions::new(
+            format!("worddrop-{:016x}", rand::rng().random::<u64>()),
+            host,
+            port,
+        );
+        options.set_keep_alive(Duration::from_secs(60));
+        if use_tls {
+            options.set_transport(Transport::tls_with_default_config());
+        }
+        Ok(AsyncClient::new(options, 10))
+    }
+
+    /// Best-effort clean close: queue DISCONNECT and poll until the packet is
+    /// written (or the connection errored — either way the broker session is
+    /// gone) so the broker drops the session instead of waiting out keep-alive.
+    /// Bounded by [`CLOSE_TIMEOUT`]: a half-open dead connection must never
+    /// stall an already-successful operation. Never fails what it follows.
+    async fn close(client: &AsyncClient, eventloop: &mut EventLoop) {
+        if client.disconnect().await.is_ok() {
+            let _ = timeout(
+                CLOSE_TIMEOUT,
+                await_event(eventloop, |event| {
+                    matches!(event, Event::Outgoing(Outgoing::Disconnect))
+                }),
+            )
+            .await;
+        }
+    }
+
+    /// Allocate a nameplate without publishing anything: the broker has no
+    /// allocation step, so the client picks a random `1..=9999` nameplate
+    /// and a later [`publish`](Self::publish) pins the ticket to it.
+    ///
+    /// `expires_at` is a DISPLAY-ONLY value (see [`RENDEZVOUS_TTL_SECS`]):
+    /// the public broker keeps retained messages with no server-side TTL.
     async fn allocate(&self, _ticket: &str) -> Result<Allocation, RvError> {
-        Err(RvError::Unimplemented {
-            detail: "MQTT allocate (Todo 7)".to_string(),
+        let nameplate = rand::rng().random_range(1..=9999);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| RvError::Io(io::Error::other("system clock before Unix epoch")))?
+            .as_secs();
+        Ok(Allocation {
+            nameplate,
+            expires_at: now + RENDEZVOUS_TTL_SECS,
         })
     }
 
-    /// Placeholder until Todo 7: publish the pairing code to the broker.
-    async fn publish(&self, _ticket: &str, _nameplate: u32, _words: &str) -> Result<(), RvError> {
-        Err(RvError::Unimplemented {
-            detail: "MQTT publish (Todo 7)".to_string(),
+    /// Store `ticket` on the broker under the pair-code topic as a retained
+    /// message: the broker re-delivers it to any later subscriber.
+    ///
+    /// The ticket is validated first (mirror of the HTTP server's
+    /// `validate_ticket`) so a garbage ticket fails before any network use.
+    async fn publish(&self, ticket: &str, nameplate: u32, words: &str) -> Result<(), RvError> {
+        if ticket.trim().is_empty() {
+            return Err(RvError::InvalidTicket {
+                detail: "ticket must not be empty".to_string(),
+            });
+        }
+        if ticket.len() > MAX_TICKET_LENGTH {
+            return Err(RvError::InvalidTicket {
+                detail: "ticket is too large".to_string(),
+            });
+        }
+        let topic = derive_topic(nameplate, words);
+        let (client, mut eventloop) = self.connect().await?;
+        timeout(MQTT_TIMEOUT, async {
+            client
+                .publish(topic, QoS::AtLeastOnce, true, ticket)
+                .await
+                .map_err(rv_mqtt)?;
+            // Outgoing::Publish is yielded only after the packet is written
+            // and flushed — the retained message is on the wire.
+            await_event(&mut eventloop, |event| {
+                matches!(event, Event::Outgoing(Outgoing::Publish(_)))
+            })
+            .await?;
+            Ok::<(), RvError>(())
         })
+        .await
+        .map_err(|_| RvError::Timeout)??;
+        Self::close(&client, &mut eventloop).await;
+        Ok(())
     }
 
-    /// Placeholder until Todo 7: claim the pairing code from the broker.
-    async fn claim(&self, _nameplate: u32, _words: &str) -> Result<String, RvError> {
-        Err(RvError::Unimplemented {
-            detail: "MQTT claim (Todo 7)".to_string(),
+    /// One-shot claim: subscribe to the pair-code topic and return the
+    /// stored ticket. `words` is used ONLY for the topic derivation — the
+    /// SPAKE2 handshake (wire.rs) still uses the original raw words.
+    ///
+    /// A retained message with an empty payload means the mailbox holds no
+    /// ticket (cleared, or never published): keep polling — the sender may
+    /// publish a moment later. The poll is bounded by [`MQTT_TIMEOUT`] and
+    /// maps to [`RvError::Timeout`], surfaced in the UI as「配对码不匹配或
+    /// 配对超时」. On success the retained ticket is cleared immediately
+    /// (approximate one-shot).
+    async fn claim(&self, nameplate: u32, words: &str) -> Result<String, RvError> {
+        let topic = derive_topic(nameplate, words);
+        let (client, mut eventloop) = self.connect().await?;
+        let ticket = timeout(MQTT_TIMEOUT, async {
+            client
+                .subscribe(&topic, QoS::AtLeastOnce)
+                .await
+                .map_err(rv_mqtt)?;
+            loop {
+                match eventloop.poll().await {
+                    Ok(Event::Incoming(Packet::Publish(publish))) => {
+                        if publish.payload.is_empty() {
+                            // Empty retained payload: no ticket yet. Keep
+                            // polling until the timeout bounds the wait.
+                            continue;
+                        }
+                        let ticket = String::from_utf8(publish.payload.to_vec()).map_err(|_| {
+                            RvError::Parse {
+                                kind: "ticket",
+                                body: String::from_utf8_lossy(&publish.payload).into_owned(),
+                            }
+                        })?;
+                        // One-shot: clear the retained ticket so a second
+                        // claim finds nothing. Best-effort — the ticket above
+                        // is the primary outcome.
+                        let _ = client.publish(&topic, QoS::AtLeastOnce, true, "").await;
+                        let _ = await_event(&mut eventloop, |event| {
+                            matches!(event, Event::Outgoing(Outgoing::Publish(_)))
+                        })
+                        .await;
+                        return Ok(ticket);
+                    }
+                    Ok(Event::Incoming(Packet::ConnAck(ack))) => {
+                        // rumqttc #250: an automatic reconnect re-runs the
+                        // CONNACK handshake and rumqttc clears pending
+                        // requests when `session_present` is false — the
+                        // subscription is silently lost. Re-subscribe on
+                        // every fresh session (harmless when duplicated).
+                        if !ack.session_present {
+                            client
+                                .subscribe(&topic, QoS::AtLeastOnce)
+                                .await
+                                .map_err(rv_mqtt)?;
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(err) => return Err(rv_mqtt(err)),
+                }
+            }
         })
+        .await
+        .map_err(|_| RvError::Timeout)??;
+        Self::close(&client, &mut eventloop).await;
+        Ok(ticket)
     }
 
-    /// Placeholder until Todo 7: clean up broker state.
-    async fn cleanup(&self, _nameplate: u32, _words: &str) -> Result<(), RvError> {
-        Err(RvError::Unimplemented {
-            detail: "MQTT cleanup (Todo 7)".to_string(),
+    /// Delete the retained ticket without reading it: publishing an empty
+    /// retained payload removes the retained message (MQTT 3.1.1 §3.3.1.3).
+    /// Idempotent — deleting an absent retained message is a no-op.
+    async fn cleanup(&self, nameplate: u32, words: &str) -> Result<(), RvError> {
+        let topic = derive_topic(nameplate, words);
+        let (client, mut eventloop) = self.connect().await?;
+        timeout(MQTT_TIMEOUT, async {
+            client
+                .publish(topic, QoS::AtLeastOnce, true, "")
+                .await
+                .map_err(rv_mqtt)?;
+            await_event(&mut eventloop, |event| {
+                matches!(event, Event::Outgoing(Outgoing::Publish(_)))
+            })
+            .await?;
+            Ok::<(), RvError>(())
         })
+        .await
+        .map_err(|_| RvError::Timeout)??;
+        Self::close(&client, &mut eventloop).await;
+        Ok(())
     }
 
-    /// A nameplate on the broker is "not claimed yet" until a claim lands
-    /// (Todo 7 implements the real poll).
+    /// A nameplate on the broker is "not claimed yet" until a claim lands;
+    /// the one-shot clear is what makes it read as claimed. There is no
+    /// production consumer of this state.
     async fn status(&self, _nameplate: u32) -> Result<PairState, RvError> {
         Ok(PairState::Pending)
     }
 
-    /// Placeholder until Todo 7: broker health check.
+    /// Broker health: a successful connect + CONNACK is the check.
     async fn health(&self) -> Result<(), RvError> {
-        Err(RvError::Unimplemented {
-            detail: "MQTT health (Todo 7)".to_string(),
+        let (client, mut eventloop) = self.connect().await?;
+        timeout(MQTT_TIMEOUT, async {
+            await_event(&mut eventloop, |event| {
+                matches!(event, Event::Incoming(Packet::ConnAck(_)))
+            })
+            .await?;
+            Ok::<(), RvError>(())
         })
+        .await
+        .map_err(|_| RvError::Timeout)??;
+        Self::close(&client, &mut eventloop).await;
+        Ok(())
     }
 }
 

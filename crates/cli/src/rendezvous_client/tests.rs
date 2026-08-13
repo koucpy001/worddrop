@@ -3,12 +3,13 @@
 //! covered by the send-pair integration test (tests/send_pair.rs).
 
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
-use super::{Allocation, HttpBackend, PairState, RvClient};
+use super::{Allocation, HttpBackend, MqttBackend, PairState, RvClient, derive_topic};
 
 /// The contract `words` argument: exactly `WordCode::password()`, the three
 /// hyphen-joined secret words — never the `[String; 3]` array. The HTTP
@@ -318,7 +319,9 @@ fn endpoint_rejects_missing_host() {
 }
 
 /// `mqtt`/`mqtts` dispatch to the MQTT backend; the scheme itself never
-/// errors — only the Todo 7 placeholder answers `Unimplemented`.
+/// errors. `allocate` needs no network (client-side random nameplate),
+/// `status` is defined, and client-side ticket validation fails fast —
+/// everything else needs a live broker.
 #[tokio::test]
 async fn mqtt_scheme_dispatches_without_scheme_error() {
     for base in ["mqtt://broker.local:1883", "mqtts://broker.emqx.io:8883"] {
@@ -327,22 +330,26 @@ async fn mqtt_scheme_dispatches_without_scheme_error() {
             matches!(&client.backend, super::Backend::Mqtt(_)),
             "{base} must build the MQTT backend"
         );
-        let err = client
+        let allocation = client
             .allocate("ticket")
             .await
-            .expect_err("mqtt placeholder not implemented yet");
+            .expect("mqtt allocate needs no network");
         assert!(
-            !matches!(err, super::RvError::BadUrl { .. }),
-            "{base}: the scheme must not be the failure"
+            (1..=9999).contains(&allocation.nameplate),
+            "random nameplate in range: {}",
+            allocation.nameplate
         );
-        assert!(
-            matches!(err, super::RvError::Unimplemented { .. }),
-            "{base}: placeholder error expected, got {err}"
-        );
-        // status is the one MQTT operation with a defined placeholder answer.
         assert_eq!(
             client.status(7).await.expect("mqtt status pending"),
             PairState::Pending
+        );
+        let err = client
+            .publish("", 7, WORDS)
+            .await
+            .expect_err("empty ticket rejected before any network use");
+        assert!(
+            matches!(err, super::RvError::InvalidTicket { .. }),
+            "validation error expected, got {err}"
         );
     }
 }
@@ -357,4 +364,127 @@ async fn http_publish_and_cleanup_are_noops() {
         .await
         .expect("publish is a no-op");
     client.cleanup(7, WORDS).await.expect("cleanup is a no-op");
+}
+
+// ---------------------------------------------------------------------------
+// MQTT backend: topic derivation (pure, no network)
+// ---------------------------------------------------------------------------
+
+/// Reference output for `derive_topic(7, "correct-horse-battery")`, computed
+/// once with the shipped argon2 dependency and pinned here so any accidental
+/// change to the KDF parameters, salt or password format is caught.
+#[test]
+fn mqtt_derive_topic_matches_reference_hash() {
+    let topic = derive_topic(7, WORDS);
+    assert_eq!(
+        topic,
+        "worddrop/v1/bafc05a25f6f2c384e8015b925744cc78f1181e31d6f79c02c301f7c8ddb9f5b"
+    );
+    assert_eq!(topic.len(), "worddrop/v1/".len() + 64, "full 32-byte hash");
+    assert!(
+        topic["worddrop/v1/".len()..]
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit()),
+        "hash part is 64 hex chars: {topic}"
+    );
+}
+
+#[test]
+fn mqtt_derive_topic_folds_nameplate_into_password() {
+    // A nameplate-only change must produce a different topic: folding the
+    // nameplate into the Argon2id password keeps the brute-force space at
+    // 9999 × 256×255×254 instead of the 24-bit words-only space.
+    assert_ne!(derive_topic(7, WORDS), derive_topic(8, WORDS));
+}
+
+#[test]
+fn mqtt_derive_topic_distinguishes_words_and_normalizes_case() {
+    assert_ne!(
+        derive_topic(7, WORDS),
+        derive_topic(7, "correct-horse-ticket")
+    );
+    assert_eq!(
+        derive_topic(7, "Correct-Horse-Battery"),
+        derive_topic(7, WORDS),
+        "case-insensitive"
+    );
+    assert_eq!(
+        derive_topic(7, "  correct-horse-battery "),
+        derive_topic(7, WORDS),
+        "trimmed"
+    );
+}
+
+#[test]
+fn mqtt_derive_topic_leading_zero_nameplate_roundtrip() {
+    // split("007-...") normalizes the nameplate to 7; the derived topic must
+    // match the one derived from the plain code (digits are not folded in).
+    let (nameplate, words) =
+        worddrop_core::pairing::wordcode::WordCode::split("007-correct-horse-battery")
+            .expect("leading-zero code splits");
+    assert_eq!(nameplate, 7);
+    assert_eq!(derive_topic(nameplate, &words), derive_topic(7, WORDS));
+}
+
+#[tokio::test]
+async fn mqtt_allocate_nameplate_in_range_with_display_ttl() {
+    let backend = MqttBackend::new("mqtts://broker.emqx.io:8883");
+    let allocation = backend.allocate("ticket").await.expect("no network needed");
+    assert!(
+        (1..=9999).contains(&allocation.nameplate),
+        "nameplate in range: {}",
+        allocation.nameplate
+    );
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_secs();
+    assert!(
+        allocation.expires_at > now,
+        "display TTL points into the future"
+    );
+    assert!(
+        allocation.expires_at <= now + 700,
+        "display TTL mirrors the HTTP server's 600 s"
+    );
+}
+
+#[tokio::test]
+async fn mqtt_publish_rejects_invalid_tickets_before_network() {
+    let backend = MqttBackend::new("mqtt://127.0.0.1:1");
+    let err = backend
+        .publish("", 7, WORDS)
+        .await
+        .expect_err("empty ticket rejected");
+    assert!(
+        matches!(err, super::RvError::InvalidTicket { .. }),
+        "got {err}"
+    );
+    let huge = "x".repeat(5000);
+    let err = backend
+        .publish(&huge, 7, WORDS)
+        .await
+        .expect_err("oversized ticket rejected");
+    assert!(
+        matches!(err, super::RvError::InvalidTicket { .. }),
+        "got {err}"
+    );
+}
+
+/// cleanup mutates nothing client-side: against an unreachable broker both
+/// calls must fail with the identical connection error — the deterministic
+/// core of idempotency (the retained-message deletion itself is idempotent
+/// per MQTT 3.1.1 §3.3.1.3 and needs a live broker to observe).
+#[tokio::test]
+async fn mqtt_cleanup_is_deterministic_on_unreachable_broker() {
+    let backend = MqttBackend::new("mqtt://127.0.0.1:1");
+    let first = backend
+        .cleanup(7, WORDS)
+        .await
+        .expect_err("no broker at port 1");
+    let second = backend
+        .cleanup(7, WORDS)
+        .await
+        .expect_err("no broker at port 1");
+    assert_eq!(first.to_string(), second.to_string());
 }
