@@ -28,6 +28,11 @@ dirs = "6"
 # T8: stream utilities for the AddProgressItem import stream (sendme pins
 # n0-future = "0.3"; already in the lockfile via iroh's tree - no new versions).
 n0-future = "0.3"
+# T5: MQTT rendezvous backend. use-rustls-no-provider (not use-rustls): core's
+# install_tls_provider already installs the global rustls crypto provider
+# (OnceLock, idempotent); use-rustls would install a second time and panic.
+rumqttc = { version = "0.25.1", default-features = false, features = ["use-rustls-no-provider"] }
+argon2 = "0.5"
 
 [profile.release]
 opt-level = "z"

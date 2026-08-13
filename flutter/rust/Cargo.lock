@@ -170,6 +170,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "argon2"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c3610892ee6e0cbce8ae2700349fcf8f98adb0dbfbee85aec3c9179d29cc072"
+dependencies = [
+ "base64ct",
+ "blake2",
+ "cpufeatures 0.2.17",
+ "password-hash",
+]
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -416,6 +428,15 @@ name = "bitflags"
 version = "2.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
+
+[[package]]
+name = "blake2"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46502ad458c9a52b69d4d4d32775c788b7a1b85e8bc9d482d92250fc0e3f8efe"
+dependencies = [
+ "digest 0.10.7",
+]
 
 [[package]]
 name = "blake3"
@@ -1152,6 +1173,23 @@ name = "find-msvc-tools"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26b73573e6edcd2af0cdf47bd6cb58f0b3839491263c314eaad1ccf24430e1de"
+
+[[package]]
+name = "fixedbitset"
+version = "0.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
+
+[[package]]
+name = "flume"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da0e4dd2a88388a1f4ccc7c9ce104604dab68d9f408dc34cd45823d5a9069095"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+ "spin 0.9.9",
+]
 
 [[package]]
 name = "flutter_rust_bridge"
@@ -3027,6 +3065,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "password-hash"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "346f04948ba92c43e8469c1ee6736c7563d71012b17d40745260fe106aac2166"
+dependencies = [
+ "base64ct",
+ "rand_core 0.6.4",
+ "subtle",
+]
+
+[[package]]
 name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3555,6 +3604,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "rumqttc"
+version = "0.25.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0feff8d882bff0b2fddaf99355a10336d43dd3ed44204f85ece28cf9626ab519"
+dependencies = [
+ "bytes",
+ "fixedbitset",
+ "flume",
+ "futures-util",
+ "log",
+ "rustls-native-certs",
+ "rustls-pemfile",
+ "rustls-webpki 0.102.8",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-rustls",
+ "tokio-stream",
+ "tokio-util",
+]
+
+[[package]]
 name = "rustc-demangle"
 version = "0.1.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3607,7 +3677,7 @@ dependencies = [
  "once_cell",
  "ring",
  "rustls-pki-types",
- "rustls-webpki",
+ "rustls-webpki 0.103.13",
  "subtle",
  "zeroize",
 ]
@@ -3622,6 +3692,15 @@ dependencies = [
  "rustls-pki-types",
  "schannel",
  "security-framework",
+]
+
+[[package]]
+name = "rustls-pemfile"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dce314e5fee3f39953d46bb63bb8a46d40c2f8fb7cc5a3b6cab2bde9721d6e50"
+dependencies = [
+ "rustls-pki-types",
 ]
 
 [[package]]
@@ -3648,7 +3727,7 @@ dependencies = [
  "rustls",
  "rustls-native-certs",
  "rustls-platform-verifier-android",
- "rustls-webpki",
+ "rustls-webpki 0.103.13",
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
@@ -3660,6 +3739,17 @@ name = "rustls-platform-verifier-android"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f87165f0995f63a9fbeea62b64d10b4d9d8e78ec6d7d51fb2125fda7bb36788f"
+
+[[package]]
+name = "rustls-webpki"
+version = "0.102.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64ca1bc8749bd4cf37b5ce386cc146580777b4e8572c7b97baf22c83f444bee9"
+dependencies = [
+ "ring",
+ "rustls-pki-types",
+ "untrusted",
+]
 
 [[package]]
 name = "rustls-webpki"
@@ -5108,13 +5198,15 @@ dependencies = [
 
 [[package]]
 name = "worddrop-cli"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
+ "argon2",
  "clap",
  "indicatif",
  "iroh",
  "iroh-blobs",
  "rand 0.9.5",
+ "rumqttc",
  "rustls",
  "serde",
  "serde_json",
@@ -5130,7 +5222,7 @@ dependencies = [
 
 [[package]]
 name = "worddrop-core"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "dirs",
  "hkdf",
@@ -5150,7 +5242,7 @@ dependencies = [
 
 [[package]]
 name = "worddrop-rendezvous"
-version = "0.2.0"
+version = "0.2.2"
 dependencies = [
  "axum",
  "rand 0.9.5",
