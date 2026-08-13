@@ -3,13 +3,10 @@
 //! implemented end to end (pairing, transfer, progress UI, resume).
 
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::time::Duration;
 
 use tokio::sync::mpsc;
 use tokio::time::timeout;
-
-use iroh::{RelayMode, RelayUrl};
 
 use worddrop_core::identity::Identity;
 use worddrop_core::transfer::engine::{EngineSpec, TransferEngine};
@@ -19,6 +16,7 @@ use crate::{
     config::{Config, ConfigFile},
     error::CliError,
     rendezvous_client::RvClient,
+    relay::relay_mode_from_url,
     send::{SendOutcome, run_send},
     ui::{SendUi, human_bytes},
     wire::{CONTROL_ALPN, ControlAcceptor, FLOW_TIMEOUT},
@@ -82,15 +80,15 @@ async fn send_async(args: SendArgs) -> Result<String, CliError> {
     let (control_tx, control_rx) = mpsc::unbounded_channel();
     let acceptor: Box<dyn iroh::protocol::DynProtocolHandler> =
         ControlAcceptor::new(control_tx).into();
-    let relay_url = RelayUrl::from_str(&config.relay_url).map_err(|source| {
+    let relay_mode = relay_mode_from_url(&config.relay_url).map_err(|source| {
         CliError::runtime(format!(
-            "无效的中继地址 {:?} / invalid relay URL {:?}: {source}",
-            config.relay_url, config.relay_url
+            "无效的中继地址 {:?} / {source}",
+            config.relay_url
         ))
     })?;
     let engine = TransferEngine::new_spec(EngineSpec {
         data_dir: &role_data_dir(&config.data_dir, Role::Send),
-        relay_mode: RelayMode::Custom(relay_url.into()),
+        relay_mode,
         secret_key: Some(identity.secret_key()),
         extra_handler: Some((CONTROL_ALPN.to_vec(), acceptor)),
         track_served_bytes: true,
@@ -174,10 +172,10 @@ async fn receive_async(args: ReceiveArgs) -> Result<String, CliError> {
     let interrupt = Box::pin(async {
         let _ = tokio::signal::ctrl_c().await;
     });
-    let relay_url = RelayUrl::from_str(&config.relay_url).map_err(|source| {
+    let relay_mode = relay_mode_from_url(&config.relay_url).map_err(|source| {
         CliError::runtime(format!(
-            "无效的中继地址 {:?} / invalid relay URL {:?}: {source}",
-            config.relay_url, config.relay_url
+            "无效的中继地址 {:?} / {source}",
+            config.relay_url
         ))
     })?;
     let outcome = tokio::time::timeout(
@@ -188,7 +186,7 @@ async fn receive_async(args: ReceiveArgs) -> Result<String, CliError> {
                 output: args.output,
                 data_dir: role_data_dir(&config.data_dir, Role::Receive),
                 rendezvous_url: config.rendezvous_url.clone(),
-                relay_mode: RelayMode::Custom(relay_url.into()),
+                relay_mode,
                 overwrite: config.overwrite,
                 auto_accept: None, // interactive prompt
             },
