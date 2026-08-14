@@ -24,10 +24,17 @@ Widget _wrap(SettingsScreen screen) => MaterialApp(
 Widget _settingsApp({
   required GetConfigFn getConfig,
   SetConfigFn setConfig = _noopSetConfig,
+  CleanupCacheFn cleanupCache = _noopCleanupCache,
 }) =>
-    _wrap(SettingsScreen(getConfig: getConfig, setConfig: setConfig));
+    _wrap(SettingsScreen(
+      getConfig: getConfig,
+      setConfig: setConfig,
+      cleanupCache: cleanupCache,
+    ));
 
 Future<String> _noopSetConfig(String key, String value) async => value;
+
+Future<String> _noopCleanupCache() async => '已清空发送缓存 0 个 blob';
 
 Future<bridge.ConfigDto> _testConfig() async => bridge.ConfigDto(
       rendezvousUrl: 'http://192.168.1.1:8080',
@@ -266,6 +273,121 @@ void main() {
       await _pumpFrames(tester);
 
       expect(find.textContaining('默认使用公共中继'), findsNothing);
+    });
+  });
+
+  group('cache cleanup', () {
+    /// The cleanup tile sits at the bottom of the settings ListView — scroll
+    /// it into view first (lazy-built children are not in the tree otherwise).
+    Future<void> scrollToCleanupTile(WidgetTester tester) async {
+      await tester.dragUntilVisible(
+        find.text('清理缓存'),
+        find.byType(ListView),
+        const Offset(0, -200),
+      );
+      await tester.pump();
+    }
+
+    testWidgets('renders the 清理缓存 tile with its labels', (tester) async {
+      await tester.pumpWidget(_settingsApp(getConfig: _testConfig));
+      await _pumpFrames(tester);
+      await scrollToCleanupTile(tester);
+
+      expect(find.text('清理缓存'), findsOneWidget);
+      expect(find.text('清空发送与接收缓存（不影响已接收的文件）'),
+          findsOneWidget);
+      expect(find.byIcon(Icons.cleaning_services_outlined), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, '清理'), findsOneWidget);
+    });
+
+    testWidgets(
+        'tapping 清理 opens the confirm dialog; 取消 closes it without cleaning',
+        (tester) async {
+      var cleanupCalls = 0;
+      await tester.pumpWidget(_settingsApp(
+        getConfig: _testConfig,
+        cleanupCache: () async {
+          cleanupCalls++;
+          return 'ok';
+        },
+      ));
+      await _pumpFrames(tester);
+      await scrollToCleanupTile(tester);
+
+      await tester.tap(find.text('清理'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(
+        find.text('确定清理缓存？将清空发送与接收的传输缓存，已接收的文件不受影响。'),
+        findsOneWidget,
+      );
+      expect(find.text('取消'), findsOneWidget);
+
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(cleanupCalls, 0);
+    });
+
+    testWidgets('confirming calls cleanupCache and shows the returned stats',
+        (tester) async {
+      await tester.pumpWidget(_settingsApp(
+        getConfig: _testConfig,
+        cleanupCache: () async =>
+            '已清空发送缓存 2 个 blob / Cleared send cache (2 blobs)',
+      ));
+      await _pumpFrames(tester);
+      await scrollToCleanupTile(tester);
+
+      await tester.tap(find.text('清理'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(
+          of: find.byType(AlertDialog), matching: find.text('清理')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.textContaining('已清空发送缓存 2 个 blob'), findsOneWidget);
+    });
+
+    testWidgets('cleanup failure shows an error snackbar', (tester) async {
+      await tester.pumpWidget(_settingsApp(
+        getConfig: _testConfig,
+        cleanupCache: () async => throw Exception('有活跃传输，请完成后再清理'),
+      ));
+      await _pumpFrames(tester);
+      await scrollToCleanupTile(tester);
+
+      await tester.tap(find.text('清理'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(
+          of: find.byType(AlertDialog), matching: find.text('清理')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('清理失败'), findsOneWidget);
+    });
+
+    testWidgets('tile shows a spinner and disables while cleanup is in flight',
+        (tester) async {
+      final completer = Completer<String>();
+      await tester.pumpWidget(_settingsApp(
+        getConfig: _testConfig,
+        cleanupCache: () => completer.future,
+      ));
+      await _pumpFrames(tester);
+      await scrollToCleanupTile(tester);
+
+      await tester.tap(find.text('清理'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(
+          of: find.byType(AlertDialog), matching: find.text('清理')));
+      // Fixed pumps for the dialog exit — the spinner never settles.
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.widgetWithText(FilledButton, '清理'), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
   });
 }

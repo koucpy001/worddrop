@@ -1,12 +1,14 @@
-// Settings screen — rendezvous URL, relay URL, data dir, overwrite toggle.
-// Loads config via the bridge (getConfig) and saves individual keys via
-// setConfig. Constructors accept injectable callbacks so widget tests can
-// supply fakes (hermetic flutter test, no native cdylib).
+// Settings screen — rendezvous URL, relay URL, data dir, overwrite toggle,
+// cache cleanup. Loads config via the bridge (getConfig) and saves individual
+// keys via setConfig. Constructors accept injectable callbacks so widget
+// tests can supply fakes (hermetic flutter test, no native cdylib).
 //
-// Chinese labels per AGENTS.md: 中继服务器地址, 配对服务器地址, 数据目录, 覆盖已有文件.
+// Chinese labels per AGENTS.md: 中继服务器地址, 配对服务器地址, 数据目录,
+// 覆盖已有文件, 清理缓存.
 
 import 'package:flutter/material.dart';
 
+import 'package:worddrop/src/rust/api/cache.dart' as bridge_cache;
 import 'package:worddrop/src/rust/api/config.dart' as bridge;
 import 'package:worddrop/theme.dart';
 
@@ -14,16 +16,22 @@ import 'package:worddrop/theme.dart';
 typedef GetConfigFn = Future<bridge.ConfigDto> Function();
 typedef SetConfigFn = Future<String> Function(String key, String value);
 
+/// Injectable cache-cleanup callback (returns the stats summary from the
+/// bridge, e.g. 「已清空发送缓存 N 个 blob / Cleared send cache (N blobs)」).
+typedef CleanupCacheFn = Future<String> Function();
+
 /// Default helpers that call the real FRB bridge.
 Future<bridge.ConfigDto> _liveGetConfig() => bridge.getConfig();
 Future<String> _liveSetConfig(String key, String value) =>
     bridge.setConfig(key: key, value: value);
+Future<String> _liveCleanupCache() => bridge_cache.cleanupCache();
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
     this.getConfig = _liveGetConfig,
     this.setConfig = _liveSetConfig,
+    this.cleanupCache = _liveCleanupCache,
   });
 
   /// Load config (defaults to the live bridge).
@@ -31,6 +39,9 @@ class SettingsScreen extends StatefulWidget {
 
   /// Save one config key (defaults to the live bridge).
   final SetConfigFn setConfig;
+
+  /// Clear the send/receive blob caches (defaults to the live bridge).
+  final CleanupCacheFn cleanupCache;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -42,6 +53,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _dataDirController = TextEditingController();
   bool _overwrite = false;
   bool _loading = true;
+  bool _cleaningCache = false;
   String? _error;
 
   @override
@@ -120,6 +132,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _save('overwrite', value ? 'true' : 'false');
   }
 
+  /// Asks for confirmation, then clears the send/receive blob caches.
+  Future<void> _confirmCleanup() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('清理缓存'),
+        content: const Text(
+            '确定清理缓存？将清空发送与接收的传输缓存，已接收的文件不受影响。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('清理'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _runCleanup();
+  }
+
+  /// Calls the bridge cleanup and reports the outcome in a SnackBar.
+  /// Disables the tile while in flight so it cannot be triggered twice.
+  Future<void> _runCleanup() async {
+    setState(() => _cleaningCache = true);
+    try {
+      final stats = await widget.cleanupCache();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(stats)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('清理失败: $e')));
+    } finally {
+      if (mounted) setState(() => _cleaningCache = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -182,6 +238,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           subtitle: '接收文件时，如果目标已存在则直接覆盖',
           value: _overwrite,
           onChanged: _saveOverwrite,
+        ),
+        const SizedBox(height: AppSpacing.md),
+        _CleanupCacheTile(
+          cleaning: _cleaningCache,
+          onPressed: _confirmCleanup,
         ),
         const SizedBox(height: AppSpacing.xl),
         _ResetButton(onReset: _load),
@@ -363,6 +424,67 @@ class _ToggleTile extends StatelessWidget {
             ),
             Switch.adaptive(value: value, onChanged: onChanged),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CleanupCacheTile extends StatelessWidget {
+  const _CleanupCacheTile({
+    required this.cleaning,
+    required this.onPressed,
+  });
+
+  /// True while a cleanup call is in flight — disables the whole tile.
+  final bool cleaning;
+
+  /// Opens the confirmation dialog.
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: cleaning ? null : onPressed,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+          child: Row(
+            children: [
+              const Icon(Icons.cleaning_services_outlined,
+                  size: 18, color: Color(0xFF57534E)),
+              const SizedBox(width: AppSpacing.sm),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('清理缓存',
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.ink)),
+                    Text('清空发送与接收缓存（不影响已接收的文件）',
+                        style: TextStyle(
+                            fontSize: 12, color: Color(0xFFA8A29E))),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              if (cleaning)
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                )
+              else
+                FilledButton.tonal(
+                  onPressed: onPressed,
+                  child: const Text('清理'),
+                ),
+            ],
+          ),
         ),
       ),
     );
