@@ -50,6 +50,11 @@ pub enum Error {
     DataDirNotDirectory { path: PathBuf },
     /// Failed to bind the QUIC endpoint.
     Bind { source: iroh::endpoint::BindError },
+    /// Failed to remove the blob cache directory.
+    CacheClear {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     /// Router shutdown failed (a protocol handler panicked).
     Shutdown { message: String },
 }
@@ -68,6 +73,11 @@ impl fmt::Display for Error {
                 )
             }
             Error::Bind { source } => write!(f, "failed to bind iroh endpoint: {source}"),
+            Error::CacheClear { path, source } => write!(
+                f,
+                "failed to clear blob cache at {}: {source}",
+                path.display()
+            ),
             Error::DataDirNotDirectory { path } => write!(
                 f,
                 "data dir {} exists but is not a directory",
@@ -84,6 +94,7 @@ impl std::error::Error for Error {
             Error::RelayUrl { source, .. } => Some(source),
             Error::StoreLoad { source, .. } => Some(source.as_ref()),
             Error::Bind { source, .. } => Some(source),
+            Error::CacheClear { source, .. } => Some(source),
             Error::DataDirNotDirectory { .. } => None,
             Error::Shutdown { .. } => None,
         }
@@ -335,5 +346,28 @@ impl TransferEngine {
                 message: source.to_string(),
             })?;
         Ok(())
+    }
+
+    /// Clear the whole blob cache: remove the `<data_dir>/blobs` directory
+    /// (blob contents + the redb database). The store is rebuilt empty the next
+    /// time an engine opens this data dir. Resume records under `<data_dir>/
+    /// transfers` and exported files in the target directory are untouched; an
+    /// interrupted transfer simply re-downloads.
+    ///
+    /// Safety: the caller must guarantee no live engine/transfer is using this
+    /// data dir (redb is single-process-exclusive). On Unix an open redb handle
+    /// survives the unlink (writes go to the old inode); on Windows removing a
+    /// still-open database fails with an I/O error, which the caller surfaces
+    /// as "retry later".
+    ///
+    /// Idempotent: a missing cache directory (never used, or already cleared)
+    /// is not an error.
+    pub async fn clear_cache(&self) -> Result<(), Error> {
+        let path = self.data_dir.join(BLOBS_DIR);
+        match tokio::fs::remove_dir_all(&path).await {
+            Ok(()) => Ok(()),
+            Err(source) if source.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(source) => Err(Error::CacheClear { path, source }),
+        }
     }
 }

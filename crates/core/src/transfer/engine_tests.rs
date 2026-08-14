@@ -349,3 +349,81 @@ async fn served_bytes_tracks_payload_served_to_receiver() {
     cleanup(&output);
     cleanup(&fixture);
 }
+
+/// `clear_cache` removes the whole blob store (contents + redb), a reopened
+/// engine starts empty and works again, and repeated clears are idempotent
+/// (a missing cache dir is Ok).
+#[tokio::test]
+async fn clear_cache_removes_blob_store_and_is_idempotent() {
+    let dir = temp_dir("clear");
+    let engine = TransferEngine::with_relay_mode(&dir, RelayMode::Disabled, None)
+        .await
+        .expect("engine init");
+
+    let tag1 = engine
+        .store()
+        .blobs()
+        .add_slice(b"clear payload one")
+        .temp_tag()
+        .await
+        .expect("add blob one");
+    let tag2 = engine
+        .store()
+        .blobs()
+        .add_slice(b"clear payload two")
+        .temp_tag()
+        .await
+        .expect("add blob two");
+    let hash1 = *tag1.as_ref();
+    let hash2 = *tag2.as_ref();
+    assert!(engine.store().blobs().has(hash1).await.expect("has one"));
+    assert!(engine.store().blobs().has(hash2).await.expect("has two"));
+    drop(tag1);
+    drop(tag2);
+
+    let blobs_dir = dir.join(BLOBS_DIR);
+    engine.clear_cache().await.expect("clear removes the store");
+    assert!(
+        !blobs_dir.exists(),
+        "blobs dir removed: {}",
+        blobs_dir.display()
+    );
+
+    // Reopen: the store is rebuilt empty and functional again.
+    engine.shutdown().await.expect("clean shutdown");
+    let engine = TransferEngine::with_relay_mode(&dir, RelayMode::Disabled, None)
+        .await
+        .expect("reopen rebuilds the store");
+    assert!(blobs_dir.exists(), "store rebuilt on reopen");
+    let blobs = engine.store().blobs().list().hashes().await.expect("list");
+    assert!(blobs.is_empty(), "cleared store starts empty");
+
+    let tag = engine
+        .store()
+        .blobs()
+        .add_slice(b"fresh blob")
+        .temp_tag()
+        .await
+        .expect("add after rebuild");
+    assert!(
+        engine
+            .store()
+            .blobs()
+            .has(*tag.as_ref())
+            .await
+            .expect("has fresh"),
+        "store works after rebuild"
+    );
+    drop(tag);
+
+    // Idempotent: clearing a fresh store, then a missing cache dir, is Ok.
+    engine.clear_cache().await.expect("second clear");
+    assert!(!blobs_dir.exists());
+    engine
+        .clear_cache()
+        .await
+        .expect("third clear on missing dir is Ok");
+
+    engine.shutdown().await.expect("clean shutdown");
+    cleanup(&dir);
+}

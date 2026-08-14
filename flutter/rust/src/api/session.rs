@@ -99,6 +99,12 @@ static SESSIONS: LazyLock<Mutex<HashMap<u64, Arc<SessionState>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
+/// Number of live transfer sessions. `cache.rs` refuses cleanup while any
+/// session is open (the redb blob store is single-process-exclusive).
+pub(super) fn live_session_count() -> Result<usize, ()> {
+    SESSIONS.lock().map(|registry| registry.len()).map_err(|_| ())
+}
+
 /// Create a session for `role`. The engine (and for the sender the control
 /// acceptor) is built now; the flow task waits for the first command.
 pub fn create_session(role: SessionRole) -> Result<SessionHandle, String> {

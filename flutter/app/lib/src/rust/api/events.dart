@@ -31,6 +31,8 @@ Future<void> emitEvent({required String kind, required String message}) =>
 /// - "downloading"   {received, total}: receiver payload progress
 /// - "exporting"     {name}: receiver writing a file to disk
 /// - "served"        {received, total}: sender-side bytes served
+/// - "skipped"       {files, bytes}: files the receiver did not re-export
+///   because they already existed (emitted right before "done")
 /// - "done"          {bytes, files}: transfer finished successfully
 /// - "error"         {message}: the flow failed
 /// - "test"          {message}: debug bus only (T16 `emitEvent` helper)
@@ -64,6 +66,14 @@ class BridgeEvent {
   }) => RustLib.instance.api.crateApiEventsBridgeEventDone(
     bytes: bytes,
     files: files,
+  );
+
+  static Future<BridgeEvent> skipped({
+    required BigInt files,
+    required BigInt bytes,
+  }) => RustLib.instance.api.crateApiEventsBridgeEventSkipped(
+    files: files,
+    bytes: bytes,
   );
 
   @override

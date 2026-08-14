@@ -29,6 +29,11 @@ pub enum Commands {
     Send(SendArgs),
     /// Receive files by entering the pairing word code.
     Receive(ReceiveArgs),
+    /// Clean up the blob cache (sent/received data in the data dir).
+    ///
+    /// Sweeps unreferenced blobs from both role stores (`<data_dir>/send` and
+    /// `<data_dir>/receive`). Resume records and received files are kept.
+    Cleanup,
     /// Show or modify the configuration file.
     Config(ConfigArgs),
 }

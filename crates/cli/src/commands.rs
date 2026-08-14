@@ -5,6 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use iroh::RelayMode;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 
@@ -30,6 +31,7 @@ pub fn run(args: Cli) -> Result<String, CliError> {
     match args.command {
         Commands::Send(args) => send(args),
         Commands::Receive(args) => receive(args),
+        Commands::Cleanup => cleanup(),
         Commands::Config(args) => config(args),
     }
 }
@@ -46,6 +48,14 @@ impl Role {
         match self {
             Self::Send => "send",
             Self::Receive => "receive",
+        }
+    }
+
+    /// Chinese label for the bilingual output.
+    fn label(self) -> &'static str {
+        match self {
+            Self::Send => "发送",
+            Self::Receive => "接收",
         }
     }
 }
@@ -241,6 +251,80 @@ fn config(args: ConfigArgs) -> Result<String, CliError> {
         Some(ConfigCommands::Set(set_args)) => set(&file, &set_args.key, &set_args.value),
         None => get(&file, None),
     }
+}
+
+/// `worddrop cleanup`: clear the blob caches of both role stores.
+///
+/// No pairing, no network: each role dir gets a short-lived engine with the
+/// relay disabled. The cached blob count is read before the clear (the whole
+/// `<data_dir>/<role>/blobs` directory is removed — no per-blob GC). Engines
+/// are created and shut down one role at a time — two open FsStores on the
+/// same redb would deadlock (D3).
+fn cleanup() -> Result<String, CliError> {
+    let runtime = tokio::runtime::Runtime::new().map_err(|source| {
+        CliError::runtime(format!(
+            "无法启动异步运行时 / failed to start async runtime: {source}"
+        ))
+    })?;
+    runtime.block_on(cleanup_async())
+}
+
+async fn cleanup_async() -> Result<String, CliError> {
+    let config = Config::load()?;
+    let mut lines = Vec::with_capacity(2);
+    for role in [Role::Send, Role::Receive] {
+        let engine = TransferEngine::new_spec(EngineSpec {
+            data_dir: &role_data_dir(&config.data_dir, role),
+            relay_mode: RelayMode::Disabled,
+            secret_key: None,
+            extra_handler: None,
+            track_served_bytes: false,
+        })
+        .await
+        .map_err(|source| {
+            CliError::runtime(format!(
+                "无法打开 {} 角色的缓存 / failed to open {} role cache: {source}",
+                role.dir_name(),
+                role.dir_name()
+            ))
+        })?;
+        let count = engine
+            .store()
+            .blobs()
+            .list()
+            .hashes()
+            .await
+            .map_err(|source| {
+                CliError::runtime(format!(
+                    "无法读取 {} 角色的缓存 / failed to read {} role cache: {source}",
+                    role.dir_name(),
+                    role.dir_name()
+                ))
+            })?
+            .len();
+        engine.clear_cache().await.map_err(|source| {
+            CliError::runtime(format!(
+                "无法清空 {} 角色的缓存，请确认没有进行中的传输后重试（Windows 下文件被占用会失败）/ failed to clear {} role cache, retry after closing any active transfer (Windows may fail while files are in use): {source}",
+                role.dir_name(),
+                role.dir_name()
+            ))
+        })?;
+        engine.shutdown().await.map_err(|source| {
+            CliError::runtime(format!(
+                "无法关闭 {} 角色的引擎 / failed to shut down {} role engine: {source}",
+                role.dir_name(),
+                role.dir_name()
+            ))
+        })?;
+        lines.push(format!(
+            "已清空{}缓存 {} 个 blob / Cleared {} cache ({} blobs)",
+            role.label(),
+            count,
+            role.dir_name(),
+            count
+        ));
+    }
+    Ok(lines.join("\n"))
 }
 
 /// `config get [KEY]`: the effective (resolved) config, not the raw file.

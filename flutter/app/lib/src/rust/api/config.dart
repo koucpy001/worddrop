@@ -8,6 +8,13 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`
 
+/// Make the config dir resolvable on Android: the platform default
+/// (`dirs::config_dir()`) is `None` in the app sandbox, so we point
+/// `WORDDROP_CONFIG_DIR` at the app-scoped external files dir unless the user
+/// already set it. No-op on other platforms. Call before any config load.
+Future<void> ensureAndroidConfigDir() =>
+    RustLib.instance.api.crateApiConfigEnsureAndroidConfigDir();
+
 /// Read the effective config.
 Future<ConfigDto> getConfig() => RustLib.instance.api.crateApiConfigGetConfig();
 

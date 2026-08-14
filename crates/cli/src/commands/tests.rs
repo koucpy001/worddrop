@@ -222,3 +222,96 @@ fn role_data_dirs_are_private_per_role() {
     );
     assert!(send.starts_with(&base) && recv.starts_with(&base));
 }
+
+/// `cleanup` on a pristine data dir: 0 blobs cleared, no error (exit 0).
+#[test]
+fn cleanup_reports_zero_on_empty_cache() {
+    let dir = temp_config_dir("cleanup-empty");
+    let data_dir = dir.join("data");
+    let _guard = ENV_LOCK.lock().unwrap();
+    unsafe {
+        std::env::set_var(identity::ENV_CONFIG_DIR, &dir);
+        std::env::set_var(identity::ENV_DATA_DIR, &data_dir);
+    }
+    let out = commands::run(cli_with(Commands::Cleanup)).expect("cleanup on empty cache");
+    assert_eq!(
+        out,
+        "已清空发送缓存 0 个 blob / Cleared send cache (0 blobs)\n已清空接收缓存 0 个 blob / Cleared receive cache (0 blobs)"
+    );
+    unsafe {
+        std::env::remove_var(identity::ENV_CONFIG_DIR);
+        std::env::remove_var(identity::ENV_DATA_DIR);
+    }
+    drop(_guard);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// `cleanup` counts and clears blobs seeded into the send role store
+/// (2 reported) and leaves the untouched receive role at 0.
+///
+/// Not a `#[tokio::test]`: `commands::run` builds its own runtime, which
+/// panics inside an existing runtime context.
+#[test]
+fn cleanup_sweeps_seeded_send_blobs() {
+    use iroh::RelayMode;
+    use worddrop_core::transfer::engine::{EngineSpec, TransferEngine};
+
+    let dir = temp_config_dir("cleanup-seeded");
+    let data_dir = dir.join("data");
+    let send_dir = data_dir.join("send");
+    let runtime = tokio::runtime::Runtime::new().expect("seed runtime");
+
+    let engine = runtime
+        .block_on(TransferEngine::new_spec(EngineSpec {
+            data_dir: &send_dir,
+            relay_mode: RelayMode::Disabled,
+            secret_key: None,
+            extra_handler: None,
+            track_served_bytes: false,
+        }))
+        .expect("seed engine");
+    let tag1 = runtime
+        .block_on(
+            engine
+                .store()
+                .blobs()
+                .add_slice(b"cache blob one")
+                .temp_tag(),
+        )
+        .expect("seed one");
+    let tag2 = runtime
+        .block_on(
+            engine
+                .store()
+                .blobs()
+                .add_slice(b"cache blob two")
+                .temp_tag(),
+        )
+        .expect("seed two");
+    drop(tag1);
+    drop(tag2);
+    runtime
+        .block_on(engine.shutdown())
+        .expect("seed engine shutdown");
+
+    let _guard = ENV_LOCK.lock().unwrap();
+    unsafe {
+        std::env::set_var(identity::ENV_CONFIG_DIR, &dir);
+        std::env::set_var(identity::ENV_DATA_DIR, &data_dir);
+    }
+    let out = commands::run(cli_with(Commands::Cleanup)).expect("cleanup runs");
+    assert_eq!(
+        out,
+        "已清空发送缓存 2 个 blob / Cleared send cache (2 blobs)\n已清空接收缓存 0 个 blob / Cleared receive cache (0 blobs)"
+    );
+    // Only the blob store is removed: the role dir itself (home of the
+    // transfer-record dir) survives.
+    assert!(send_dir.exists(), "role dir kept");
+    assert!(!send_dir.join("blobs").exists(), "send blob store removed");
+    unsafe {
+        std::env::remove_var(identity::ENV_CONFIG_DIR);
+        std::env::remove_var(identity::ENV_DATA_DIR);
+    }
+    drop(_guard);
+    let _ = fs::remove_dir_all(&dir);
+}

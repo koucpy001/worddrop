@@ -79,11 +79,11 @@ fn parse_unknown_subcommand_rejected() {
 }
 
 #[test]
-fn help_lists_send_receive_config() {
+fn help_lists_all_subcommands() {
     let command = Cli::command();
     let names = command
         .get_subcommands()
         .map(|cmd| cmd.get_name())
         .collect::<Vec<_>>();
-    assert_eq!(names, ["send", "receive", "config"]);
+    assert_eq!(names, ["send", "receive", "cleanup", "config"]);
 }
