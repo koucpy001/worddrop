@@ -21,9 +21,9 @@
 
 ## Status（状态）
 
-- **v0.2.3 已发布**：[GitHub Releases](https://github.com/koucpy001/worddrop/releases/tag/v0.2.3)，
+- **v0.2.4 已发布**：[GitHub Releases](https://github.com/koucpy001/worddrop/releases/tag/v0.2.4)，
   提供 Linux / Windows / macOS 与 Android 的预编译产物（见[下载](#download-下载)）。
-- **v0.2.3 默认零部署**：开箱即用，默认接入公共基础设施——iroh 公共 relay + EMQX
+- **v0.2.4 默认零部署**：开箱即用，默认接入公共基础设施——iroh 公共 relay + EMQX
   公共配对信箱（MQTT），无需注册、无需自建服务、无需任何配置即可互传；需要自建
   时见[部署](#deployment-部署)与[默认 vs 自建](#默认-vs-自建)。
 - **仓库公开**：[github.com/koucpy001/worddrop](https://github.com/koucpy001/worddrop)，
@@ -34,7 +34,7 @@
 
 ## Download (下载)
 
-Release v0.2.3：<https://github.com/koucpy001/worddrop/releases/tag/v0.2.3>
+Release v0.2.4：<https://github.com/koucpy001/worddrop/releases/tag/v0.2.4>
 
 > **全部为便携版（portable / 绿色版）**：zip 解压即用，无需安装程序，不写入注册表
 > 或系统目录，删除即卸载。桌面 GUI 的可执行文件名均为 `worddrop`。
@@ -47,7 +47,10 @@ Release v0.2.3：<https://github.com/koucpy001/worddrop/releases/tag/v0.2.3>
 | `worddrop-windows-app.zip` | Windows x86_64 | 桌面 GUI（`worddrop.exe` + DLL） |
 | `worddrop-macos-app.zip` | macOS | 桌面 GUI（`WordDrop.app`，未签名） |
 | `app-release.apk` | Android（arm64-v8a / armeabi-v7a / x86_64） | release 签名 APK，可直接安装 |
-| `sha256sums.txt` | - | 前五个 zip 的 SHA-256 校验清单 |
+| `worddrop-server-linux.zip` | Linux x86_64 | 局域网服务机专用：`worddrop-rendezvous` + `iroh-relay` 双二进制，零编译 |
+| `worddrop-server-windows.zip` | Windows x86_64 | 局域网服务机专用：`worddrop-rendezvous.exe` + `iroh-relay.exe` 双二进制，零编译 |
+| `worddrop-server-macos.zip` | macOS（Apple Silicon / arm64） | 局域网服务机专用：`worddrop-rendezvous` + `iroh-relay` 双二进制，零编译 |
+| `sha256sums.txt` | - | 前八个 zip 的 SHA-256 校验清单 |
 
 校验下载：`sha256sum -c sha256sums.txt`（Windows 可逐个用
 `certutil -hashfile <file> SHA256` 比对）。
@@ -124,7 +127,7 @@ worddrop receive --code 7-correct-horse-battery --output ~/Downloads
 
 ### 配置（服务地址）
 
-客户端通过 `rendezvous_url` / `relay_url` 找到配对信箱和中继。v0.2.3 起**默认即公共
+客户端通过 `rendezvous_url` / `relay_url` 找到配对信箱和中继。v0.2.4 起**默认即公共
 基础设施，无需本机服务、无需任何配置**；只有自建服务（局域网 / 公网）时才需要把
 这两个地址指向"跑着服务的那台机器"：
 
@@ -310,7 +313,7 @@ nameplate+words 的慢 KDF 承诺，性质不同，见下文「公共信箱（MQ
 
 ### 公共信箱（MQTT）模式
 
-v0.2.3 起默认配对信箱是 **EMQX 公共 broker（MQTT）**（`mqtts://broker.emqx.io:8883`），
+v0.2.4 起默认配对信箱是 **EMQX 公共 broker（MQTT）**（`mqtts://broker.emqx.io:8883`），
 与自建 HTTP rendezvous 的安全性质不同。以下逐条如实声明：
 
 - **(a) 配对 topic 的派生与暴力空间**：配对 topic 由「nameplate+words」经
@@ -362,45 +365,76 @@ WordDrop 是 P2P 传输工具，**两个服务都不在传输链路上**，它�
 
 ### 服务器二进制从哪来？
 
-release 资产只有**客户端**（CLI + GUI + APK），**没有服务器二进制**。服务器两种获取方式：
+v0.2.4 起 release 已提供**服务器 zip**（`worddrop-server-<平台>.zip`，含
+rendezvous + relay 双二进制，零编译，见[下载](#download-下载)）：
+
+- **方案 A（局域网）**：直接下载服务器 zip，解压即用（见下文）。
+- **方案 B（公网）**：Docker Compose 自动构建（见下文"公网部署"）。
+- **源码构建备选**：`cargo build --release -p worddrop-rendezvous`（中继
+  `cargo install iroh-relay --version 1.0.3 --features server`）。
+
+### 方案 A：局域网快速部署（下载即用，零编译）
+
+在局域网里**任选一台常开设备**作为服务机（Windows / macOS / Linux 桌面均可，
+无需额外机器），所有设备在同一局域网即可。
+
+**步骤 1：下载**
+
+从 [GitHub Releases](https://github.com/koucpy001/worddrop/releases) 下载：
+
+- 服务器 zip：`worddrop-server-<平台>.zip`（按服务机系统选 Linux / Windows / macOS）
+- 客户端 zip：`worddrop-<平台>-cli.zip` 或 app zip（每台收发设备）
+
+**步骤 2：解压**
+
+解压服务器 zip，得到两个二进制：`worddrop-rendezvous`（配对信箱，**必需**）+
+`iroh-relay`（中继，可选兜底）。
+
+**步骤 3：启动服务（两个终端或 nohup）**
+
+Linux / macOS：
 
 ```sh
-# 方式一（推荐）：Docker Compose 自动构建（见下文"公网部署"）
-# 方式二：源码构建
-cargo build --release -p worddrop-rendezvous          # 配对信箱 → target/release/worddrop-rendezvous
-# 中继（必须带 --features server）
-cargo install iroh-relay --version 1.0.3 --features server
+# 配对信箱（必需）——必须绑 0.0.0.0，其他设备才能连
+WORDDROP_RENDEZVOUS_ADDR=0.0.0.0:8080 ./worddrop-rendezvous
+# 中继（可选，局域网打洞几乎必成功，可跳过）——--dev 模式跑纯 HTTP，监听 3340
+./iroh-relay --dev
 ```
 
-### 方案 A：局域网快速部署（免 Docker，最轻）
+Windows（PowerShell）：
 
-在局域网里**任选一台设备**（你的台式机即可，无需额外机器）跑两个服务：
-
-```sh
-# 1. 构建（只需一次；本机已 build 则跳过）
-cargo build --release -p worddrop-rendezvous
-cargo install iroh-relay --version 1.0.3 --features server
-
-# 2. 启动服务（两个终端或 nohup）
-# rendezvous：默认 127.0.0.1:8080；局域网要让其他设备连，必须绑 0.0.0.0
-WORDDROP_RENDEZVOUS_ADDR=0.0.0.0:8080 ./target/release/worddrop-rendezvous
-# relay：--dev 模式跑纯 HTTP，监听 3340
-iroh-relay --dev
-
-# 3. 查看本机局域网 IP
-ip addr | grep 'inet ' | grep -v 127.0.0.1
-# 例如 192.168.1.100
+```powershell
+# 配对信箱（必需）——必须绑 0.0.0.0，其他设备才能连
+$env:WORDDROP_RENDEZVOUS_ADDR="0.0.0.0:8080"; .\worddrop-rendezvous.exe
+# 中继（可选，局域网打洞几乎必成功，可跳过）——--dev 模式跑纯 HTTP，监听 3340
+.\iroh-relay.exe --dev
 ```
 
-其他设备（手机/另一台电脑）指向服务机：
+**步骤 4：查服务机局域网 IP**
+
+- Windows：`ipconfig`（IPv4 地址）
+- Linux / macOS：`ip addr`（`ip addr | grep 'inet ' | grep -v 127.0.0.1`）
+
+例如 `192.168.1.100`。
+
+**步骤 5：客户端配置（每台设备，包括服务机自己）**
 
 ```sh
+# 服务机自己：
+worddrop config set rendezvous_url http://127.0.0.1:8080
+# 其他设备（手机 / 另一台电脑）：
 worddrop config set rendezvous_url http://192.168.1.100:8080
+# relay 同理：跑了就填 relay_url http://<服务机IP>:3340，没跑就不填
 worddrop config set relay_url http://192.168.1.100:3340
 ```
 
 > 资源占用实测：rendezvous ~2.5 MiB、relay ~2.3 MiB、CPU 接近 0。任何设备都能当服务机。
 > 局域网内 rendezvous 是必需（配对流程依赖），relay 基本闲置但保留地址以防打洞失败。
+
+> **零编译**：服务器二进制已随 release 提供；如想源码构建：
+> `cargo build --release -p worddrop-rendezvous`（+ `cargo install iroh-relay --version 1.0.3 --features server`）。
+> macOS 服务器 zip 为 **Apple Silicon（arm64）**；Intel Mac 用户请源码构建，
+> 或自取官方 x86_64 relay（`iroh-relay-v1.0.3-x86_64-apple-darwin.tar.gz`）+ 源码编译 rendezvous。
 
 ### 方案 B：公网部署（VPS + Docker Compose，含自动 HTTPS）
 
@@ -444,7 +478,7 @@ worddrop config set relay_url https://relay.example.com
 
 ### 方案 C：默认即公共基础设施（零部署、零配置）
 
-v0.2.3 起**默认即为公共基础设施**：配对信箱走 EMQX 公共 broker（MQTT），中继走
+v0.2.4 起**默认即为公共基础设施**：配对信箱走 EMQX 公共 broker（MQTT），中继走
 iroh 公共 relay。**无需任何配置**，开箱即用：
 
 ```sh

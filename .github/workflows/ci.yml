@@ -144,6 +144,13 @@ jobs:
           path: flutter/app/build/linux/x64/release/bundle
           if-no-files-found: error
 
+      - name: Upload Linux rendezvous server binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: worddrop-server-linux
+          path: target/release/worddrop-rendezvous
+          if-no-files-found: error
+
   windows:
     name: windows (cargo test + flutter build windows)
     runs-on: windows-latest
@@ -220,6 +227,13 @@ jobs:
           path: flutter/app/build/windows/x64/runner/Release
           if-no-files-found: error
 
+      - name: Upload Windows rendezvous server binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: worddrop-server-windows
+          path: target/release/worddrop-rendezvous.exe
+          if-no-files-found: error
+
   macos:
     name: macos (flutter build macos + cargo test)
     runs-on: macos-latest
@@ -257,6 +271,11 @@ jobs:
       - name: Test workspace (core, rendezvous, cli)
         run: cargo test --workspace -j 2
 
+      # macOS job previously had no release build; the rendezvous server binary
+      # (and the CLI) are needed in target/release for the release job.
+      - name: Build CLI release binary (includes rendezvous server)
+        run: cargo build --release -j 2
+
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -279,6 +298,13 @@ jobs:
         with:
           name: worddrop-macos-app
           path: flutter/app/build/macos/Build/Products/Release/*.app
+          if-no-files-found: error
+
+      - name: Upload macOS rendezvous server binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: worddrop-server-macos
+          path: target/release/worddrop-rendezvous
           if-no-files-found: error
 
   release:
@@ -334,6 +360,67 @@ jobs:
           path: artifacts/worddrop-macos-app
           if-no-files-found: error
 
+      - name: Download Linux rendezvous server artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: worddrop-server-linux
+          path: artifacts/server-linux
+          if-no-files-found: error
+
+      - name: Download Windows rendezvous server artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: worddrop-server-windows
+          path: artifacts/server-windows
+          if-no-files-found: error
+
+      - name: Download macOS rendezvous server artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: worddrop-server-macos
+          path: artifacts/server-macos
+          if-no-files-found: error
+
+      # iroh-relay official prebuilt binaries (n0-computer/iroh tag v1.0.3):
+      # each archive holds a single binary, possibly version-suffixed; the
+      # basename guard normalizes it to the canonical name. The macOS runner is
+      # Apple Silicon (arm64), matching the aarch64 relay below with the arm64
+      # rendezvous built by the macos job.
+      - name: Download iroh-relay official binary (Linux)
+        working-directory: artifacts/server-linux
+        run: |
+          curl -fsSL -o iroh-relay.tar.gz \
+            https://github.com/n0-computer/iroh/releases/download/v1.0.3/iroh-relay-v1.0.3-x86_64-unknown-linux-gnu.tar.gz
+          tar -xzf iroh-relay.tar.gz
+          rm iroh-relay.tar.gz
+          BIN="$(find . -maxdepth 2 -type f -name 'iroh-relay*' | head -1)"
+          test -n "$BIN"
+          if [ "$(basename "$BIN")" != "iroh-relay" ]; then mv "$BIN" iroh-relay; fi
+          chmod +x iroh-relay
+
+      - name: Download iroh-relay official binary (Windows)
+        working-directory: artifacts/server-windows
+        run: |
+          curl -fsSL -o iroh-relay.zip \
+            https://github.com/n0-computer/iroh/releases/download/v1.0.3/iroh-relay-v1.0.3-x86_64-pc-windows-msvc.zip
+          unzip -o iroh-relay.zip
+          rm iroh-relay.zip
+          BIN="$(find . -maxdepth 2 -type f -name 'iroh-relay*' | head -1)"
+          test -n "$BIN"
+          if [ "$(basename "$BIN")" != "iroh-relay.exe" ]; then mv "$BIN" iroh-relay.exe; fi
+
+      - name: Download iroh-relay official binary (macOS)
+        working-directory: artifacts/server-macos
+        run: |
+          curl -fsSL -o iroh-relay.tar.gz \
+            https://github.com/n0-computer/iroh/releases/download/v1.0.3/iroh-relay-v1.0.3-aarch64-apple-darwin.tar.gz
+          tar -xzf iroh-relay.tar.gz
+          rm iroh-relay.tar.gz
+          BIN="$(find . -maxdepth 2 -type f -name 'iroh-relay*' | head -1)"
+          test -n "$BIN"
+          if [ "$(basename "$BIN")" != "iroh-relay" ]; then mv "$BIN" iroh-relay; fi
+          chmod +x iroh-relay
+
       # One zip per artifact (bundles are directories; sha256sum cannot hash
       # them directly). The released zips ARE these files, so the checksums in
       # sha256sums.txt verify the downloaded assets 1:1.
@@ -345,6 +432,9 @@ jobs:
           zip -r -q worddrop-windows-cli.zip worddrop-windows-cli
           zip -r -q worddrop-windows-app.zip worddrop-windows-app
           zip -r -q worddrop-macos-app.zip worddrop-macos-app
+          zip -r -q worddrop-server-linux.zip server-linux
+          zip -r -q worddrop-server-windows.zip server-windows
+          zip -r -q worddrop-server-macos.zip server-macos
 
       - name: Generate sha256sums.txt
         working-directory: artifacts
@@ -362,6 +452,9 @@ jobs:
             echo "- worddrop-windows-cli.zip — Windows CLI"
             echo "- worddrop-windows-app.zip — Windows GUI"
             echo "- worddrop-macos-app.zip — macOS GUI"
+            echo "- worddrop-server-linux.zip — Linux 局域网服务机（rendezvous + relay，零编译）"
+            echo "- worddrop-server-windows.zip — Windows 局域网服务机（rendezvous + relay，零编译）"
+            echo "- worddrop-server-macos.zip — macOS (Apple Silicon) 局域网服务机（rendezvous + relay，零编译）"
             echo ""
             echo "### Changelog"
             PREV_TAG="$(git tag --sort=-version:refname | sed -n '2p')"
@@ -381,5 +474,8 @@ jobs:
             artifacts/worddrop-windows-cli.zip
             artifacts/worddrop-windows-app.zip
             artifacts/worddrop-macos-app.zip
+            artifacts/worddrop-server-linux.zip
+            artifacts/worddrop-server-windows.zip
+            artifacts/worddrop-server-macos.zip
             artifacts/sha256sums.txt
           body_path: release-body.md
