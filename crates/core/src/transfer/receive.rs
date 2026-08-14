@@ -56,8 +56,10 @@ pub struct TransferResult {
     pub bytes: u64,
     /// Number of files exported.
     pub files: usize,
-    /// Collection names skipped because the target existed and `overwrite`
-    /// was false.
+    /// Total bytes of skipped files: targets that existed (overwrite=false)
+    /// or were already exported by an earlier resumed attempt.
+    pub skipped_bytes: u64,
+    /// Collection names skipped (see `skipped_bytes`).
     pub skipped: Vec<String>,
 }
 

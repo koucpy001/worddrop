@@ -68,6 +68,8 @@ fn session_control_roundtrip_each_variant() {
         ControlMessage::Result {
             bytes: 4096,
             files: 1,
+            skipped_bytes: 0,
+            skipped_files: 0,
         },
     ];
     for message in messages {

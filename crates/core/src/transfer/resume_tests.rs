@@ -399,8 +399,17 @@ async fn resume_skips_files_the_record_marks_as_exported() {
     assert_eq!(result.bytes, 0);
     assert_eq!(
         result.skipped,
-        vec!["input/m.txt", "input/nested/b.txt", "input/z.txt"],
-        "remaining files skipped by the conflict policy"
+        vec![
+            "input/a.txt",
+            "input/m.txt",
+            "input/nested/b.txt",
+            "input/z.txt",
+        ],
+        "record-marked and conflict-policy skips are both accounted"
+    );
+    assert_eq!(
+        result.skipped_bytes, prepared.total_bytes,
+        "every file counted as skipped bytes"
     );
     assert!(
         !target.join("input/a.txt").exists(),

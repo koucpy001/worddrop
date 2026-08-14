@@ -195,6 +195,8 @@ async fn run_fake_peer(
                 &ControlMessage::Result {
                     bytes: result.bytes,
                     files: result.files as u32,
+                    skipped_bytes: result.skipped_bytes,
+                    skipped_files: result.skipped.len() as u32,
                 },
             )
             .await
@@ -333,9 +335,15 @@ async fn send_flow_accept_transfers_files_byte_for_byte() {
         .expect("flow completes within 180s")
         .expect("sender flow succeeds")
     {
-        SendOutcome::Completed { bytes, files } => {
+        SendOutcome::Completed {
+            bytes,
+            files,
+            skipped_files,
+            ..
+        } => {
             assert!(bytes > 0, "sender reports positive bytes");
             assert_eq!(files, 3, "sender reports 3 files");
+            assert_eq!(skipped_files, 0, "no skips on a fresh receive");
         }
         other => panic!("expected Completed, got {other:?}"),
     }

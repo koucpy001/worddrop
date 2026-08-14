@@ -137,11 +137,24 @@ async fn send_async(args: SendArgs) -> Result<String, CliError> {
     })??;
 
     let summary = match outcome {
-        SendOutcome::Completed { bytes, files } => format!(
-            "传输完成：{files} 个文件，{} / Transfer complete: {files} files, {}\n",
-            human_bytes(bytes),
-            human_bytes(bytes)
-        ),
+        SendOutcome::Completed {
+            bytes,
+            files,
+            skipped_files,
+            ..
+        } => {
+            let mut line = format!(
+                "传输完成：{files} 个文件，{} / Transfer complete: {files} files, {}\n",
+                human_bytes(bytes),
+                human_bytes(bytes)
+            );
+            if skipped_files > 0 {
+                line.push_str(&format!(
+                    "（跳过 {skipped_files} 个已存在文件 / skipped {skipped_files} existing files）\n"
+                ));
+            }
+            line
+        }
         SendOutcome::Declined { reason } => {
             format!("接收方已拒绝：{reason} / Receiver declined: {reason}\n")
         }
@@ -197,11 +210,24 @@ async fn receive_async(args: ReceiveArgs) -> Result<String, CliError> {
     })??;
 
     let summary = match outcome {
-        crate::receive::ReceiveOutcome::Completed { bytes, files } => format!(
-            "传输完成：{files} 个文件，{} / Transfer complete: {files} files, {}\n",
-            human_bytes(bytes),
-            human_bytes(bytes)
-        ),
+        crate::receive::ReceiveOutcome::Completed {
+            bytes,
+            files,
+            skipped_files,
+            ..
+        } => {
+            let mut line = format!(
+                "传输完成：{files} 个文件，{} / Transfer complete: {files} files, {}\n",
+                human_bytes(bytes),
+                human_bytes(bytes)
+            );
+            if skipped_files > 0 {
+                line.push_str(&format!(
+                    "（跳过 {skipped_files} 个已存在文件 / skipped {skipped_files} existing files）\n"
+                ));
+            }
+            line
+        }
         crate::receive::ReceiveOutcome::Declined => "已拒绝 / Declined\n".to_string(),
         crate::receive::ReceiveOutcome::Cancelled => "已取消 / Cancelled\n".to_string(),
     };

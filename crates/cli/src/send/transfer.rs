@@ -58,8 +58,13 @@ where
             }
             message = recv_message_idle(recv, "transfer result or cancel") => {
                 match message? {
-                    ControlMessage::Result { bytes, files } => {
-                        if bytes != total || files != file_count {
+                    ControlMessage::Result {
+                        bytes,
+                        files,
+                        skipped_bytes,
+                        skipped_files,
+                    } => {
+                        if !result_matches(bytes, files, skipped_bytes, skipped_files, total, file_count) {
                             return Err(SendError::ResultMismatch {
                                 expected_bytes: total,
                                 expected_files: file_count,
@@ -69,7 +74,12 @@ where
                         }
                         bar.finish_and_clear();
                         session.transition(Transition::Completed).await?;
-                        return Ok(SendOutcome::Completed { bytes, files });
+                        return Ok(SendOutcome::Completed {
+                            bytes,
+                            files,
+                            skipped_bytes,
+                            skipped_files,
+                        });
                     }
                     ControlMessage::Cancel => {
                         bar.finish_and_clear();
@@ -87,5 +97,44 @@ where
                 bar.set_position(served);
             }
         }
+    }
+}
+
+/// Whether a receiver [`ControlMessage::Result`] accounts for the prepared
+/// totals: skipped files (targets the receiver did not re-export) count as
+/// delivered, so a retransmit of an already-received collection reconciles.
+fn result_matches(
+    bytes: u64,
+    files: u32,
+    skipped_bytes: u64,
+    skipped_files: u32,
+    total: u64,
+    file_count: u32,
+) -> bool {
+    bytes + skipped_bytes == total && files + skipped_files == file_count
+}
+
+#[cfg(test)]
+mod tests {
+    use super::result_matches;
+
+    #[test]
+    fn result_matches_counts_skipped_as_delivered() {
+        // Split delivery: 100/1 exported + 100/1 skipped == 200/2 prepared.
+        assert!(result_matches(100, 1, 100, 1, 200, 2));
+        // Pure-skip retransmit: everything already existed, nothing exported.
+        assert!(result_matches(0, 0, 18_369_543, 1, 18_369_543, 1));
+        // No skips: plain full transfer still reconciles.
+        assert!(result_matches(200, 2, 0, 0, 200, 2));
+    }
+
+    #[test]
+    fn result_matches_rejects_partial_accounting() {
+        // Skipped bytes claimed but files do not add up.
+        assert!(!result_matches(100, 1, 50, 1, 200, 2));
+        // Files add up but skipped bytes do not.
+        assert!(!result_matches(100, 1, 100, 0, 200, 2));
+        // Nothing delivered at all.
+        assert!(!result_matches(0, 0, 0, 0, 200, 2));
     }
 }

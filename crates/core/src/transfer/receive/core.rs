@@ -8,7 +8,7 @@ use std::time::{Duration, SystemTime};
 
 use iroh_blobs::{
     api::{
-        blobs::{ExportMode, ExportOptions, ExportProgressItem},
+        blobs::{BlobStatus, ExportMode, ExportOptions, ExportProgressItem},
         remote::GetProgressItem,
     },
     format::collection::Collection,
@@ -140,6 +140,7 @@ impl TransferEngine {
             })?;
         let mut bytes = 0u64;
         let mut files = 0usize;
+        let mut skipped_bytes = 0u64;
         let mut skipped = Vec::new();
         for (name, hash) in collection.iter() {
             if record
@@ -148,12 +149,15 @@ impl TransferEngine {
                 .is_some()
             {
                 warn!(name, "resume: skipping already exported file");
+                skipped_bytes += self.skipped_blob_size(hash).await;
+                skipped.push(name.clone());
                 continue;
             }
             let target = super::export_target(&root, name)?;
             if target.exists() {
                 if !options.overwrite {
                     warn!(name, target = %target.display(), "skipping existing target");
+                    skipped_bytes += self.skipped_blob_size(hash).await;
                     skipped.push(name.clone());
                     continue;
                 }
@@ -218,7 +222,26 @@ impl TransferEngine {
         Ok(TransferResult {
             bytes,
             files,
+            skipped_bytes,
             skipped,
         })
+    }
+
+    /// Size of a stored blob for skipped-file accounting: `Complete` blobs
+    /// report their size; anything else (theoretically impossible for a
+    /// skipped file — it was just downloaded or exported) logs a warning
+    /// and counts 0 so accounting can never fail a transfer.
+    async fn skipped_blob_size(&self, hash: &iroh_blobs::Hash) -> u64 {
+        match self.store().blobs().status(*hash).await {
+            Ok(BlobStatus::Complete { size }) => size,
+            Ok(status) => {
+                warn!(hash = %hash, ?status, "skipped file not complete; accounting 0 bytes");
+                0
+            }
+            Err(source) => {
+                warn!(hash = %hash, error = %source, "blob status lookup failed; accounting 0 bytes");
+                0
+            }
+        }
     }
 }

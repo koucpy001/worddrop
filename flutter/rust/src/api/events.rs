@@ -23,6 +23,8 @@ use crate::frb_generated::StreamSink;
 /// - "downloading"   {received, total}: receiver payload progress
 /// - "exporting"     {name}: receiver writing a file to disk
 /// - "served"        {received, total}: sender-side bytes served
+/// - "skipped"       {files, bytes}: files the receiver did not re-export
+///   because they already existed (emitted right before "done")
 /// - "done"          {bytes, files}: transfer finished successfully
 /// - "error"         {message}: the flow failed
 /// - "test"          {message}: debug bus only (T16 `emitEvent` helper)
@@ -53,6 +55,10 @@ impl BridgeEvent {
 
     pub fn done(bytes: u64, files: u64) -> Self {
         Self { kind: "done".to_owned(), bytes: Some(bytes), files: Some(files), ..Self::empty() }
+    }
+
+    pub fn skipped(files: u64, bytes: u64) -> Self {
+        Self { kind: "skipped".to_owned(), files: Some(files), bytes: Some(bytes), ..Self::empty() }
     }
 
     pub fn error(message: impl Into<String>) -> Self {
@@ -137,6 +143,11 @@ mod tests {
         let done = BridgeEvent::done(12, 2);
         assert_eq!(done.bytes, Some(12));
         assert_eq!(done.files, Some(2));
+
+        let skipped = BridgeEvent::skipped(3, 4096);
+        assert_eq!(skipped.kind, "skipped");
+        assert_eq!(skipped.files, Some(3));
+        assert_eq!(skipped.bytes, Some(4096));
 
         assert_eq!(BridgeEvent::error("boom").message.as_deref(), Some("boom"));
         assert_eq!(BridgeEvent::info("paired").kind, "info");

@@ -36,6 +36,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   String? _exportingName;
   String? _error;
   String? _formError;
+  String? _skippedNote;
   bool _connecting = false;
   /// The claimed pairing code — the in-memory key of the active transfer.
   String? _code;
@@ -149,6 +150,8 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       case 'done':
         if (code != null) store.completeTransfer(code);
         setState(() => _stage = ReceiveStage.done);
+      case 'skipped':
+        setState(() => _skippedNote = '（跳过 ${event.files ?? 0} 个已存在文件）');
       case 'phase':
         if (event.phase == 'cancelled') {
           if (code != null) store.cancelTransfer(code);
@@ -200,8 +203,8 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                 ReceiveStage.done => StatusBanner(
                     variant: BannerVariant.success,
                     message: _exportingName == null
-                        ? '传输完成'
-                        : '传输完成，已保存到「received」目录',
+                        ? '传输完成${_skippedNote ?? ''}'
+                        : '传输完成，已保存到「received」目录${_skippedNote ?? ''}',
                     actionLabel: '完成',
                     onAction: () => Navigator.of(context).pop(),
                   ),

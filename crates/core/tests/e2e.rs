@@ -790,7 +790,12 @@ where
 #[derive(Debug)]
 enum SenderOutcome {
     /// The receiver accepted and reported the transfer result.
-    Completed { bytes: u64, files: u32 },
+    Completed {
+        bytes: u64,
+        files: u32,
+        skipped_bytes: u64,
+        skipped_files: u32,
+    },
     /// The receiver refused the offer.
     Declined { reason: String },
     /// The receiver cancelled.
@@ -868,15 +873,25 @@ async fn run_sender_flow(
             // The transfer runs while we wait; the receiver may still cancel
             // mid-transfer, so Result and Cancel are both expected here.
             match recv_message_idle(&mut recv, "transfer result or cancel").await? {
-                ControlMessage::Result { bytes, files: got } => {
-                    if bytes != total || got as usize != files {
+                ControlMessage::Result {
+                    bytes,
+                    files: got,
+                    skipped_bytes,
+                    skipped_files,
+                } => {
+                    if bytes + skipped_bytes != total || got + skipped_files != files as u32 {
                         return Err(FlowError::Unexpected(format!(
                             "sender: result mismatch: expected {total} bytes / {files} \
-                             files, got {bytes} / {got}"
+                             files, got {bytes} / {got} (skipped {skipped_bytes} / {skipped_files})"
                         )));
                     }
                     session.transition(Transition::Completed).await?;
-                    SenderOutcome::Completed { bytes, files: got }
+                    SenderOutcome::Completed {
+                        bytes,
+                        files: got,
+                        skipped_bytes,
+                        skipped_files,
+                    }
                 }
                 ControlMessage::Cancel => {
                     session.cancel().await?;
@@ -1066,6 +1081,8 @@ async fn run_receiver_flow(
                 &ControlMessage::Result {
                     bytes: result.bytes,
                     files: result.files as u32,
+                    skipped_bytes: result.skipped_bytes,
+                    skipped_files: result.skipped.len() as u32,
                 },
             )
             .await?;
@@ -1083,6 +1100,7 @@ async fn run_receiver_flow(
                 result: TransferResult {
                     bytes: 0,
                     files: 0,
+                    skipped_bytes: 0,
                     skipped: Vec::new(),
                 },
                 phase: session.phase().await,
@@ -1162,6 +1180,7 @@ async fn run_receiver_cancel_mid_transfer(
         result: TransferResult {
             bytes: 0,
             files: 0,
+            skipped_bytes: 0,
             skipped: Vec::new(),
         },
         phase: session.phase().await,
@@ -1338,9 +1357,15 @@ async fn e2e_happy_path_full_transfer() {
         let receiver_done = receiver_done.expect("receiver flow must succeed");
 
         match sender_done.outcome {
-            SenderOutcome::Completed { bytes, files } => {
+            SenderOutcome::Completed {
+                bytes,
+                files,
+                skipped_files,
+                ..
+            } => {
                 assert!(bytes > 0, "sender reports positive bytes");
                 assert_eq!(files as usize, 3, "sender reports 3 files");
+                assert_eq!(skipped_files, 0, "no skips on a fresh receive");
             }
             other => panic!("expected Completed, got {other:?}"),
         }
@@ -1354,9 +1379,78 @@ async fn e2e_happy_path_full_transfer() {
     verify_exported(&output);
 }
 
-// ============================================================================
-//  Flow 2 — decline
-// ============================================================================
+/// Retransmit scenario: the receiver's target dir already holds every file,
+/// so the receive skips them (overwrite=false) and reports 0 exported / all
+/// skipped. The sender must reconcile the skipped counts as delivered —
+/// previously this surfaced as a bogus "result mismatch".
+#[tokio::test]
+async fn e2e_retransmit_skips_existing_targets() {
+    let _relay = ensure_relay().await;
+    let (rv_url, _rv_task) = spawn_rendezvous().await;
+
+    let fixture = temp_dir("fixtures");
+    let (a, b, c) = fixture_files(&fixture);
+    let total = std::fs::metadata(&a).unwrap().len()
+        + std::fs::metadata(&b).unwrap().len()
+        + std::fs::metadata(&c).unwrap().len();
+    let sender_dir = temp_dir("sender");
+    let receiver_dir = temp_dir("receiver");
+    let output = temp_dir("output");
+    // Pre-seed the target dir with the same files: the second receive of the
+    // same collection must skip them, not re-export.
+    fixture_files(&output);
+
+    let (control_tx, control_rx) = mpsc::unbounded_channel::<Connection>();
+    let sender_eng = sender_engine(&sender_dir, control_tx).await;
+    let receiver_eng = receiver_engine(&receiver_dir).await;
+
+    let (code_tx, mut code_rx) = mpsc::channel(1);
+    let sender_rv = RvClient::new(&rv_url);
+    let receiver_rv = RvClient::new(&rv_url);
+
+    timeout(FLOW_TIMEOUT, async {
+        let sender_fut = run_sender_flow(sender_eng, control_rx, sender_rv, vec![a, b, c], code_tx);
+        tokio::pin!(sender_fut);
+
+        let pair = await_sender_code(&mut sender_fut, &mut code_rx).await;
+
+        let receiver_fut = run_receiver_flow(
+            receiver_eng,
+            &pair.code,
+            None,
+            receiver_rv,
+            output.clone(),
+            ReceiverAction::Accept,
+        );
+        tokio::pin!(receiver_fut);
+
+        let (sender_done, receiver_done) = tokio::join!(sender_fut, receiver_fut);
+        let sender_done = sender_done.expect("sender flow must succeed");
+        let receiver_done = receiver_done.expect("receiver flow must succeed");
+
+        match sender_done.outcome {
+            SenderOutcome::Completed {
+                skipped_bytes,
+                skipped_files,
+                ..
+            } => {
+                assert_eq!(skipped_files, 3, "sender counts all three files as skipped");
+                assert_eq!(skipped_bytes, total, "sender counts skipped bytes");
+            }
+            other => panic!("expected Completed without mismatch, got {other:?}"),
+        }
+        assert_eq!(sender_done.phase, SessionPhase::Done);
+        assert_eq!(receiver_done.result.files, 0, "nothing exported");
+        assert_eq!(receiver_done.result.skipped.len(), 3);
+        assert_eq!(receiver_done.result.skipped_bytes, total);
+        assert_eq!(receiver_done.phase, SessionPhase::Done);
+    })
+    .await
+    .expect("retransmit flow must finish within the flow timeout");
+
+    // The pre-seeded files are untouched (skipped, not replaced).
+    verify_exported(&output);
+}
 
 #[tokio::test]
 async fn e2e_decline_flow() {
@@ -1654,6 +1748,8 @@ async fn e2e_resume_after_interrupt() {
         &ControlMessage::Result {
             bytes: result.bytes,
             files: result.files as u32,
+            skipped_bytes: result.skipped_bytes,
+            skipped_files: result.skipped.len() as u32,
         },
     )
     .await

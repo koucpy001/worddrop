@@ -118,6 +118,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &ControlMessage::Result {
             bytes: result.bytes,
             files: result.files as u32,
+            skipped_bytes: result.skipped_bytes,
+            skipped_files: result.skipped.len() as u32,
         },
     )
     .await?;

@@ -48,8 +48,17 @@ pub enum ControlMessage {
     Decline { reason: String },
     /// Either side aborts.
     Cancel,
-    /// Final outcome of a completed transfer.
-    Result { bytes: u64, files: u32 },
+    /// Final outcome of a completed transfer. `skipped_bytes` /
+    /// `skipped_files` count files the receiver did not re-export because
+    /// the target already existed (or an earlier resume already exported
+    /// them); the sender reconciles them as delivered so a retransmit of an
+    /// already-received collection does not mismatch.
+    Result {
+        bytes: u64,
+        files: u32,
+        skipped_bytes: u64,
+        skipped_files: u32,
+    },
 }
 
 impl ControlMessage {

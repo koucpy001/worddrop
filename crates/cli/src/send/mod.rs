@@ -32,8 +32,14 @@ use crate::wire::{PAIR_TIMEOUT, PairError, recv_hello, recv_message_idle, spake_
 /// How the send flow ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SendOutcome {
-    /// The receiver accepted and reported the transfer result.
-    Completed { bytes: u64, files: u32 },
+    /// The receiver accepted and reported the transfer result (skipped
+    /// targets counted separately).
+    Completed {
+        bytes: u64,
+        files: u32,
+        skipped_bytes: u64,
+        skipped_files: u32,
+    },
     /// The receiver refused the offer.
     Declined { reason: String },
     /// Either side cancelled (local Ctrl+C or remote Cancel).

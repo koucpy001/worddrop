@@ -61,6 +61,7 @@ class _SendScreenState extends State<SendScreen> {
   BigInt? _total;
   int _filesFound = 0;
   String? _error;
+  String? _skippedNote;
 
   @override
   void dispose() {
@@ -139,6 +140,8 @@ class _SendScreenState extends State<SendScreen> {
         final prepared = _prepared;
         if (prepared != null) store.completeTransfer(prepared.code);
         setState(() => _stage = SendStage.done);
+      case 'skipped':
+        setState(() => _skippedNote = '（跳过 ${event.files ?? 0} 个已存在文件）');
       case 'phase':
         final prepared = _prepared;
         if (event.phase == 'cancelled') {
@@ -207,9 +210,9 @@ class _SendScreenState extends State<SendScreen> {
                     total: _total,
                     onCancel: _cancel,
                   ),
-                SendStage.done => const StatusBanner(
+                SendStage.done => StatusBanner(
                     variant: BannerVariant.success,
-                    message: '传输完成',
+                    message: '传输完成${_skippedNote ?? ''}',
                   ),
                 SendStage.failed => StatusBanner(
                     variant: BannerVariant.error,

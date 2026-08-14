@@ -358,16 +358,19 @@ async fn transfer_phase(
                 Some(other) => reject_other(other, "sender session: unexpected command during transfer"),
             },
             message = wire::recv_message_idle(recv, "transfer result or cancel") => match message {
-                Ok(ControlMessage::Result { bytes, files }) => {
-                    if bytes != total || files != file_count {
+                Ok(ControlMessage::Result { bytes, files, skipped_bytes, skipped_files }) => {
+                    if bytes + skipped_bytes != total || files + skipped_files != file_count {
                         emit(events, BridgeEvent::error(format!(
-                            "receiver result mismatch: expected {total} bytes / {file_count} files, got {bytes} / {files}"
+                            "receiver result mismatch: expected {total} bytes / {file_count} files, got {bytes} / {files} (skipped {skipped_bytes} / {skipped_files})"
                         )));
                         finish_failed(session, stage, events).await;
                     } else if let Err(err) = session.transition(Transition::Completed).await {
                         emit(events, BridgeEvent::error(err.to_string()));
                         finish_failed(session, stage, events).await;
                     } else {
+                        if skipped_files > 0 {
+                            emit(events, BridgeEvent::skipped(skipped_files as u64, skipped_bytes));
+                        }
                         emit(events, BridgeEvent::phase("done"));
                         emit(events, BridgeEvent::done(bytes, files as u64));
                         *stage.lock().unwrap() = Stage::Terminal;
@@ -654,7 +657,12 @@ async fn accept_transfer(
 
     match outcome {
         Ok(result) => {
-            let result_msg = ControlMessage::Result { bytes: result.bytes, files: result.files as u32 };
+            let result_msg = ControlMessage::Result {
+                bytes: result.bytes,
+                files: result.files as u32,
+                skipped_bytes: result.skipped_bytes,
+                skipped_files: result.skipped.len() as u32,
+            };
             if let Err(err) = send_message(send, &result_msg).await {
                 emit(events, BridgeEvent::error(err.to_string()));
                 finish_failed(session, stage, events).await;
@@ -665,6 +673,9 @@ async fn accept_transfer(
                 emit(events, BridgeEvent::error(err.to_string()));
                 finish_failed(session, stage, events).await;
             } else {
+                if !result.skipped.is_empty() {
+                    emit(events, BridgeEvent::skipped(result.skipped.len() as u64, result.skipped_bytes));
+                }
                 emit(events, BridgeEvent::phase("done"));
                 emit(events, BridgeEvent::done(result.bytes, result.files as u64));
                 *stage.lock().unwrap() = Stage::Terminal;

@@ -252,10 +252,16 @@ async fn run_fake_sender(
                     .await
                     .map_err(|err| err.to_string())?;
             match final_msg {
-                ControlMessage::Result { bytes, files } => {
-                    if bytes != total || files != file_count {
+                ControlMessage::Result {
+                    bytes,
+                    files,
+                    skipped_bytes,
+                    skipped_files,
+                } => {
+                    if bytes + skipped_bytes != total || files + skipped_files != file_count {
                         return Err(format!(
-                            "result mismatch: expected {total}/{file_count}, got {bytes}/{files}"
+                            "result mismatch: expected {total}/{file_count}, \
+                             got {bytes}/{files} (skipped {skipped_bytes}/{skipped_files})"
                         ));
                     }
                     Ok(SenderDone {
@@ -319,9 +325,15 @@ async fn receive_flow_accept_downloads_all_files() {
     );
 
     match receiver_result.expect("receiver flow must succeed") {
-        ReceiveOutcome::Completed { bytes, files } => {
+        ReceiveOutcome::Completed {
+            bytes,
+            files,
+            skipped_files,
+            ..
+        } => {
             assert!(bytes > 0, "receiver reports positive bytes");
             assert_eq!(files, 3, "receiver reports 3 files");
+            assert_eq!(skipped_files, 0, "no skips on a fresh receive");
         }
         other => panic!("expected Completed, got {other:?}"),
     }

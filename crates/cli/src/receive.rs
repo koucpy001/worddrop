@@ -44,8 +44,13 @@ const CODE_PROMPT_TIMEOUT: Duration = Duration::from_secs(120);
 /// How the receive flow ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReceiveOutcome {
-    /// Files downloaded and exported.
-    Completed { bytes: u64, files: usize },
+    /// Files downloaded and exported (skipped targets counted separately).
+    Completed {
+        bytes: u64,
+        files: usize,
+        skipped_bytes: u64,
+        skipped_files: usize,
+    },
     /// The user declined the offer.
     Declined,
     /// Either side cancelled (local Ctrl+C or remote Cancel).
@@ -466,6 +471,8 @@ where
                 &ControlMessage::Result {
                     bytes: result.bytes,
                     files: result.files as u32,
+                    skipped_bytes: result.skipped_bytes,
+                    skipped_files: result.skipped.len() as u32,
                 },
             )
             .await?;
@@ -474,6 +481,8 @@ where
             Ok(ReceiveOutcome::Completed {
                 bytes: result.bytes,
                 files: result.files,
+                skipped_bytes: result.skipped_bytes,
+                skipped_files: result.skipped.len(),
             })
         }
         Err(err) => {
