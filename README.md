@@ -21,8 +21,10 @@
 
 ## Status（状态）
 
-- **v0.2.4 已发布**：[GitHub Releases](https://github.com/koucpy001/worddrop/releases/tag/v0.2.4)，
+- **v0.2.5 已发布**：[GitHub Releases](https://github.com/koucpy001/worddrop/releases/tag/v0.2.5)，
   提供 Linux / Windows / macOS 与 Android 的预编译产物（见[下载](#download-下载)）。
+- **v0.2.5 变更**：v0.2.5 修复重复传输同一文件时报错的问题（改为跳过已存在文件并提示）；新增缓存清理
+  （设置页一键清理 / `worddrop cleanup` 命令，不影响已接收文件）。
 - **v0.2.4 默认零部署**：开箱即用，默认接入公共基础设施——iroh 公共 relay + EMQX
   公共配对信箱（MQTT），无需注册、无需自建服务、无需任何配置即可互传；需要自建
   时见[部署](#deployment-部署)与[默认 vs 自建](#默认-vs-自建)。
@@ -34,7 +36,7 @@
 
 ## Download (下载)
 
-Release v0.2.4：<https://github.com/koucpy001/worddrop/releases/tag/v0.2.4>
+Release v0.2.5：<https://github.com/koucpy001/worddrop/releases/tag/v0.2.5>
 
 > **全部为便携版（portable / 绿色版）**：zip 解压即用，无需安装程序，不写入注册表
 > 或系统目录，删除即卸载。桌面 GUI 的可执行文件名均为 `worddrop`。
